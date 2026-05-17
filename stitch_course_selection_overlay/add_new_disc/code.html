@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Add New Disc</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#93000a",
+                        "on-primary-container": "#002c4f",
+                        "surface-tint": "#9ecaff",
+                        "tertiary-container": "#00a854",
+                        "surface-container": "#201f1f",
+                        "outline": "#89919d",
+                        "surface-dim": "#131313",
+                        "surface-bright": "#393939",
+                        "secondary": "#bcc7de",
+                        "inverse-on-surface": "#313030",
+                        "on-primary": "#003258",
+                        "secondary-fixed-dim": "#bcc7de",
+                        "surface-variant": "#353534",
+                        "on-tertiary-fixed-variant": "#005226",
+                        "on-secondary-fixed": "#111c2d",
+                        "tertiary-fixed": "#62ff96",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed": "#001d36",
+                        "on-background": "#e5e2e1",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-highest": "#353534",
+                        "background": "#131313",
+                        "outline-variant": "#404752",
+                        "on-error": "#690005",
+                        "on-secondary": "#263143",
+                        "primary-fixed": "#d1e4ff",
+                        "primary-container": "#2196f3",
+                        "primary": "#9ecaff",
+                        "on-surface-variant": "#bfc7d4",
+                        "secondary-container": "#3e495d",
+                        "on-tertiary-container": "#003315",
+                        "on-primary-fixed-variant": "#00497d",
+                        "on-tertiary": "#003918",
+                        "inverse-surface": "#e5e2e1",
+                        "on-secondary-container": "#aeb9d0",
+                        "inverse-primary": "#0061a4",
+                        "on-secondary-fixed-variant": "#3c475a",
+                        "surface": "#131313",
+                        "primary-fixed-dim": "#9ecaff",
+                        "tertiary-fixed-dim": "#00e475",
+                        "tertiary": "#00e475",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-container-high": "#2a2a2a",
+                        "on-surface": "#e5e2e1",
+                        "secondary-fixed": "#d8e3fb",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed": "#00210b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xl": "48px",
+                        "lg": "32px",
+                        "base": "8px",
+                        "xs": "4px",
+                        "md": "20px",
+                        "touch-target-min": "44px",
+                        "sm": "12px",
+                        "margin-mobile": "16px",
+                        "gutter-mobile": "12px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Manrope"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "stat-value": ["Manrope"],
+                        "display-lg": ["Manrope"],
+                        "body-lg": ["Manrope"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "700" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "stat-value": ["28px", { "lineHeight": "32px", "fontWeight": "800" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md text-body-md antialiased selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar: Transactional, mapped from JSON structure but modified for "Back" intent -->
+<header class="flex items-center justify-between px-margin-mobile h-touch-target-min w-full z-50 bg-background sticky top-0">
+<button aria-label="Back" class="text-primary hover:bg-surface-container transition-colors p-2 rounded-full flex items-center justify-center active:scale-95">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary text-center flex-1 pr-10">Add New Disc</h1>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-margin-mobile pb-xl pt-md overflow-y-auto w-full max-w-2xl mx-auto space-y-md">
+<!-- Form Container -->
+<form class="space-y-lg">
+<!-- Basic Info Section -->
+<section class="bg-surface-container rounded-xl p-md border border-outline-variant/30 space-y-md">
+<!-- Disc Name -->
+<div class="space-y-xs">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase tracking-wider" for="discName">Disc Name</label>
+<input class="w-full bg-surface-variant text-on-surface border-none rounded-lg focus:ring-2 focus:ring-primary h-touch-target-min px-4 font-body-md placeholder:text-outline-variant transition-shadow" id="discName" name="discName" placeholder="e.g. Destroyer, Buzzz, Aviar" type="text"/>
+</div>
+<!-- Manufacturer -->
+<div class="space-y-xs">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase tracking-wider" for="manufacturer">Manufacturer</label>
+<div class="relative">
+<select class="w-full bg-surface-variant text-on-surface border-none rounded-lg focus:ring-2 focus:ring-primary h-touch-target-min px-4 appearance-none font-body-md transition-shadow" id="manufacturer" name="manufacturer">
+<option disabled="" selected="" value="">Select Manufacturer</option>
+<option value="innova">Innova</option>
+<option value="discraft">Discraft</option>
+<option value="dynamic">Dynamic Discs</option>
+<option value="mvp">MVP</option>
+<option value="latitude64">Latitude 64</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Color Selection (Visual Radio) -->
+<div class="space-y-sm">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase tracking-wider">Primary Color</label>
+<div class="flex gap-sm overflow-x-auto pb-2 -mx-2 px-2 snap-x">
+<label class="relative cursor-pointer snap-start shrink-0">
+<input checked="" class="peer sr-only" name="discColor" type="radio" value="blue"/>
+<div class="w-12 h-12 rounded-full bg-[#2196f3] ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-white opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer snap-start shrink-0">
+<input class="peer sr-only" name="discColor" type="radio" value="red"/>
+<div class="w-12 h-12 rounded-full bg-[#f44336] ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-white opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer snap-start shrink-0">
+<input class="peer sr-only" name="discColor" type="radio" value="green"/>
+<div class="w-12 h-12 rounded-full bg-[#4caf50] ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-white opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer snap-start shrink-0">
+<input class="peer sr-only" name="discColor" type="radio" value="yellow"/>
+<div class="w-12 h-12 rounded-full bg-[#ffeb3b] ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-black opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer snap-start shrink-0">
+<input class="peer sr-only" name="discColor" type="radio" value="pink"/>
+<div class="w-12 h-12 rounded-full bg-[#e91e63] ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-white opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer snap-start shrink-0">
+<input class="peer sr-only" name="discColor" type="radio" value="white"/>
+<div class="w-12 h-12 rounded-full bg-white border border-outline-variant ring-2 ring-transparent peer-checked:ring-primary peer-checked:ring-offset-2 peer-checked:ring-offset-surface-container transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-black opacity-0 peer-checked:opacity-100 transition-opacity">check</span>
+</div>
+</label>
+</div>
+</div>
+</section>
+<!-- Flight Numbers Section (Bento Grid Style) -->
+<section class="space-y-md">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider px-1">Flight Numbers</h2>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-sm">
+<!-- Speed -->
+<div class="bg-surface-container rounded-xl p-sm border border-outline-variant/30 flex flex-col items-center justify-center space-y-2 aspect-square relative group">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Speed</span>
+<input class="bg-transparent border-none text-center font-stat-value text-stat-value text-on-surface focus:ring-0 p-0 w-full h-12 transition-colors focus:text-primary" max="15" min="1" type="number" value="9"/>
+<div class="absolute inset-0 rounded-xl border-2 border-transparent group-focus-within:border-primary pointer-events-none transition-colors"></div>
+</div>
+<!-- Glide -->
+<div class="bg-surface-container rounded-xl p-sm border border-outline-variant/30 flex flex-col items-center justify-center space-y-2 aspect-square relative group">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Glide</span>
+<input class="bg-transparent border-none text-center font-stat-value text-stat-value text-on-surface focus:ring-0 p-0 w-full h-12 transition-colors focus:text-primary" max="7" min="1" type="number" value="5"/>
+<div class="absolute inset-0 rounded-xl border-2 border-transparent group-focus-within:border-primary pointer-events-none transition-colors"></div>
+</div>
+<!-- Turn -->
+<div class="bg-surface-container rounded-xl p-sm border border-outline-variant/30 flex flex-col items-center justify-center space-y-2 aspect-square relative group">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Turn</span>
+<input class="bg-transparent border-none text-center font-stat-value text-stat-value text-on-surface focus:ring-0 p-0 w-full h-12 transition-colors focus:text-primary" max="1" min="-5" type="number" value="-1"/>
+<div class="absolute inset-0 rounded-xl border-2 border-transparent group-focus-within:border-primary pointer-events-none transition-colors"></div>
+</div>
+<!-- Fade -->
+<div class="bg-surface-container rounded-xl p-sm border border-outline-variant/30 flex flex-col items-center justify-center space-y-2 aspect-square relative group">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Fade</span>
+<input class="bg-transparent border-none text-center font-stat-value text-stat-value text-on-surface focus:ring-0 p-0 w-full h-12 transition-colors focus:text-primary" max="5" min="0" type="number" value="2"/>
+<div class="absolute inset-0 rounded-xl border-2 border-transparent group-focus-within:border-primary pointer-events-none transition-colors"></div>
+</div>
+</div>
+</section>
+<!-- Weight Section -->
+<section class="bg-surface-container rounded-xl p-md border border-outline-variant/30 flex items-center justify-between">
+<div class="space-y-xs flex-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase tracking-wider" for="weight">Weight (Mass)</label>
+<div class="flex items-center gap-2">
+<input class="bg-transparent border-none font-stat-value text-stat-value text-on-surface focus:ring-0 p-0 w-20 transition-colors focus:text-primary" id="weight" name="weight" type="number" value="175"/>
+<span class="font-body-md text-on-surface-variant">grams</span>
+</div>
+</div>
+<div class="h-12 w-12 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="scale">scale</span>
+</div>
+</section>
+<!-- Save Action -->
+<div class="pt-lg pb-md sticky bottom-0 bg-background/90 backdrop-blur-md">
+<button class="w-full bg-primary-container text-on-primary-container font-headline-md text-headline-md h-14 rounded-full flex items-center justify-center gap-sm active:scale-95 transition-transform shadow-lg shadow-black/20 hover:bg-primary-fixed" type="submit">
+<span class="material-symbols-outlined" data-icon="add_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">add_circle</span>
+                    Save Disc to Bag
+                </button>
+</div>
+</form>
+</main>
+<!-- Navigation Suppressed: This is a transactional flow (add item) with a back button. -->
+</body></html>
