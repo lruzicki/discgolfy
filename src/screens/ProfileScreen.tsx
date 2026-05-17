@@ -1,11 +1,19 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
+import { supabase } from '../lib/supabase';
 
 export function ProfileScreen({ route }: any) {
   const { name, email } = route.params || {};
   const displayName = name || 'Lucas';
+
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -15,8 +23,8 @@ export function ProfileScreen({ route }: any) {
           <Ionicons name="menu" size={28} color={COLORS.textLight} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>DiscGolf Pro</Text>
-        <TouchableOpacity>
-          <Ionicons name="notifications-outline" size={24} color={COLORS.textLight} />
+        <TouchableOpacity onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={24} color={COLORS.textLight} />
         </TouchableOpacity>
       </View>
 

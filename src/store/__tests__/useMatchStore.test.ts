@@ -27,4 +27,15 @@ describe('useMatchStore', () => {
       strokes: 1,
     });
   });
+
+  it('sets course and layout', () => {
+    const { setCourse, setLayout } = useMatchStore.getState();
+    
+    setCourse('c1');
+    setLayout('l2');
+    
+    const state = useMatchStore.getState();
+    expect(state.courseId).toBe('c1');
+    expect(state.layoutId).toBe('l2');
+  });
 });
