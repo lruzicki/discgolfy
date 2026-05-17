@@ -192,20 +192,17 @@ export function SelectCourseScreen({ navigation }: any) {
     }
   };
 
+  const handlePlayNav = () => {
+    const matchId = useMatchStore.getState().matchId;
+    if (matchId) {
+      navigation.navigate('ActiveMatch');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" />
       
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="menu" size={28} color={COLORS.textLight} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>DiscGolf Pro</Text>
-        <TouchableOpacity>
-          <Ionicons name="close" size={28} color={COLORS.textLight} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.pageTitle}>Select Course</Text>
 
@@ -238,19 +235,15 @@ export function SelectCourseScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="compass-outline" size={24} color={COLORS.primary} />
-          <Text style={[styles.navText, { color: COLORS.primary }]}>Courses</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="play-circle-outline" size={24} color={COLORS.textSecondary} />
-          <Text style={styles.navText}>Play</Text>
+        <TouchableOpacity style={styles.navItem} onPress={handlePlayNav}>
+          <Ionicons name="play-circle-outline" size={24} color={COLORS.primary} />
+          <Text style={[styles.navText, { color: COLORS.primary }]}>Play</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="podium-outline" size={24} color={COLORS.textSecondary} />
           <Text style={styles.navText}>Leaderboard</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Login')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
           <Ionicons name="person-outline" size={24} color={COLORS.textSecondary} />
           <Text style={styles.navText}>Profile</Text>
         </TouchableOpacity>
@@ -263,20 +256,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  headerTitle: {
-    color: COLORS.primary,
-    fontSize: 20,
-    fontWeight: '700',
   },
   scrollContent: {
     padding: 20,

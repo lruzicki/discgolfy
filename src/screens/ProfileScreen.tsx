@@ -3,10 +3,12 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Ima
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
+import { useMatchStore } from '../store/useMatchStore';
 
-export function ProfileScreen({ route }: any) {
+export function ProfileScreen({ route, navigation }: any) {
   const { name, email } = route.params || {};
   const displayName = name || 'Lucas';
+  const matchId = useMatchStore(state => state.matchId);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -15,19 +17,16 @@ export function ProfileScreen({ route }: any) {
     }
   };
 
+  const handlePlayPress = () => {
+    if (matchId) {
+      navigation.navigate('ActiveMatch');
+    } else {
+      navigation.navigate('SelectCourse');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Ionicons name="menu" size={28} color={COLORS.textLight} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>DiscGolf Pro</Text>
-        <TouchableOpacity onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={24} color={COLORS.textLight} />
-        </TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
@@ -98,11 +97,17 @@ export function ProfileScreen({ route }: any) {
           <Text style={{ color: COLORS.textMuted, textAlign: 'center' }}>Chart Placeholder</Text>
         </View>
 
+        {/* Logout Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+          <Ionicons name="log-out-outline" size={20} color="#FF5252" />
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+
       </ScrollView>
 
       {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={handlePlayPress}>
           <Ionicons name="play-circle-outline" size={24} color={COLORS.textSecondary} />
           <Text style={styles.navText}>PLAY</Text>
         </TouchableOpacity>
@@ -123,20 +128,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  headerTitle: {
-    color: COLORS.primary,
-    fontSize: 20,
-    fontWeight: '700',
   },
   scrollContent: {
     padding: 20,
@@ -262,6 +253,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 32,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 82, 82, 0.2)',
+  },
+  logoutText: {
+    color: '#FF5252',
+    fontSize: 16,
+    fontWeight: '600',
   },
   bottomNav: {
     flexDirection: 'row',

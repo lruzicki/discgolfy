@@ -6,6 +6,7 @@ import { RegisterScreen } from './src/screens/RegisterScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { SelectCourseScreen } from './src/screens/SelectCourseScreen';
 import { SelectPlayersScreen } from './src/screens/SelectPlayersScreen';
+import { ActiveMatchScreen } from './src/screens/ActiveMatchScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { StatusBar, ActivityIndicator, View } from 'react-native';
@@ -49,6 +50,7 @@ export default function App() {
             <>
               <Stack.Screen name="SelectCourse" component={SelectCourseScreen} />
               <Stack.Screen name="SelectPlayers" component={SelectPlayersScreen} />
+              <Stack.Screen name="ActiveMatch" component={ActiveMatchScreen} />
               <Stack.Screen 
                 name="Profile" 
                 component={ProfileScreen} 
