@@ -99,21 +99,39 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
       <View style={styles.leaderboardSection}>
         <Text style={styles.leaderboardTitle}>ROUND LEADERBOARD</Text>
         {leaderboard.map((p, idx) => (
-          <View key={p.id} style={styles.leaderboardRow}>
-            <View style={styles.leaderboardRank}>
-              <Text style={styles.leaderboardRankText}>{idx + 1}</Text>
+          <View key={p.id} style={styles.leaderboardPlayerRow}>
+            <View style={styles.leaderboardRankBadge}>
+              <Text style={styles.leaderboardRankBadgeText}>{idx + 1}</Text>
             </View>
-            <Text style={styles.leaderboardName}>{p.display_name}</Text>
-            <View style={styles.leaderboardScore}>
-              <Text style={styles.leaderboardStrokes}>{p.totalStrokes}</Text>
-              <Text style={[
-                styles.leaderboardDiff,
-                p.diff < 0 && styles.scoreUnder,
-                p.diff > 0 && styles.scoreOver,
-                p.diff === 0 && { color: COLORS.textSecondary }
-              ]}>
-                ({p.diff === 0 ? 'E' : (p.diff > 0 ? `+${p.diff}` : p.diff)})
+            
+            <View style={styles.leaderboardAvatar}>
+              <Text style={styles.leaderboardAvatarText}>{p.display_name[0]}</Text>
+            </View>
+
+            <View style={styles.leaderboardInfo}>
+              <Text style={styles.leaderboardPlayerName}>{p.display_name}</Text>
+              <Text style={styles.leaderboardPlayerStatus}>
+                Round in progress
               </Text>
+            </View>
+
+            <View style={styles.leaderboardScoreContainer}>
+              <Text style={styles.leaderboardTotalStrokes}>{p.totalStrokes}</Text>
+              <View style={[
+                styles.leaderboardDiffBadge,
+                p.diff < 0 && styles.scoreUnderBg,
+                p.diff > 0 && styles.scoreOverBg,
+                p.diff === 0 && styles.scoreEvenBg
+              ]}>
+                <Text style={[
+                  styles.leaderboardDiffText,
+                  p.diff < 0 && styles.scoreUnderText,
+                  p.diff > 0 && styles.scoreOverText,
+                  p.diff === 0 && styles.scoreEvenText
+                ]}>
+                  {p.diff === 0 ? 'E' : (p.diff > 0 ? `+${p.diff}` : p.diff)}
+                </Text>
+              </View>
             </View>
           </View>
         ))}
@@ -910,50 +928,84 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.5,
-    marginBottom: 16,
+    marginBottom: 20,
     paddingHorizontal: 4,
   },
-  leaderboardRow: {
+  leaderboardPlayerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.05)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
-  leaderboardRank: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.borderDark,
+  leaderboardRankBadge: {
+    width: 20,
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  leaderboardRankBadgeText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+    opacity: 0.5,
+  },
+  leaderboardAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(144, 202, 249, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(144, 202, 249, 0.2)',
   },
-  leaderboardRankText: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
+  leaderboardAvatarText: {
+    color: '#90CAF9',
+    fontSize: 16,
     fontWeight: '700',
   },
-  leaderboardName: {
+  leaderboardInfo: {
     flex: 1,
+  },
+  leaderboardPlayerName: {
     color: COLORS.text,
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  leaderboardScore: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+  leaderboardPlayerStatus: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
+    opacity: 0.6,
   },
-  leaderboardStrokes: {
+  leaderboardScoreContainer: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  leaderboardTotalStrokes: {
     color: COLORS.text,
     fontSize: 18,
     fontWeight: '800',
+    fontFamily: 'JetBrains Mono',
   },
-  leaderboardDiff: {
-    fontSize: 12,
-    fontWeight: '700',
+  leaderboardDiffBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    minWidth: 32,
+    alignItems: 'center',
   },
+  leaderboardDiffText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  scoreUnderBg: { backgroundColor: 'rgba(57, 255, 20, 0.15)' },
+  scoreUnderText: { color: COLORS.success },
+  scoreOverBg: { backgroundColor: 'rgba(255, 82, 82, 0.15)' },
+  scoreOverText: { color: '#FF5252' },
+  scoreEvenBg: { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
+  scoreEvenText: { color: COLORS.textSecondary },
   summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
   summaryRow: { flexDirection: 'row', marginBottom: 2 },
   summaryCell: { flex: 1, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
