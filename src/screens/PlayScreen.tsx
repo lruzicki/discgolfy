@@ -141,7 +141,7 @@ export function PlayScreen() {
               style={styles.quickCard} 
               onPress={() => navigation.navigate('Profile', { screen: 'ProfileHome' })}
             >
-              <Ionicons name="history" size={24} color={COLORS.primary} />
+              <Ionicons name="time-outline" size={24} color={COLORS.primary} />
               <Text style={styles.quickText}>History</Text>
             </TouchableOpacity>
           </View>

@@ -14,6 +14,7 @@ import { MatchSummaryScreen } from './src/screens/MatchSummaryScreen';
 import { PlayScreen } from './src/screens/PlayScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MatchHistoryScreen } from './src/screens/MatchHistoryScreen';
+import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { StatusBar, ActivityIndicator, View } from 'react-native';
@@ -41,6 +42,7 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileHome" component={ProfileScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Bag" component={BagScreen} />
       <Stack.Screen name="AddEditDisc" component={AddEditDiscScreen} />
       <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />

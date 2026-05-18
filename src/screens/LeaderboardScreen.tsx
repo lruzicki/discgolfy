@@ -7,248 +7,364 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Image,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { PodiumView } from '../components/PodiumView';
 
-interface MatchEntry {
+interface PlayerRanking {
   id: string;
-  date_played: string;
-  layout_name: string;
-  course_name: string;
-  creator_name: string;
-  player_count: number;
-  top_score: number | null;
-  players: {
-    display_name: string;
-    total_score: number | null;
-  }[];
-}
-
-interface ThrowEntry {
-  id: string;
-  distance_m: number;
   display_name: string;
-  disc_name: string;
-  course_name: string;
-  date: string;
+  value: number | string;
+  subValue?: string;
 }
 
-type Tab = 'rounds' | 'throws' | 'players';
+type FilterType = 'avg_diff' | 'best_score' | 'longest_throw' | 'longest_putt' | 'most_rounds' | 'total_strokes';
 
 export function LeaderboardScreen() {
-  const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState<Tab>('rounds');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [matches, setMatches] = useState<MatchEntry[]>([]);
-  const [topThrows, setTopThrows] = useState<ThrowEntry[]>([]);
+  const [rankings, setRankings] = useState<PlayerRanking[]>([]);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('avg_diff');
+  
+  const [courses, setCourses] = useState<{id: string, name: string}[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [coursePickerOpen, setCoursePickerOpen] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, [activeTab]);
+    fetchCourses();
+  }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    fetchRankings();
+  }, [activeFilter, selectedCourse]);
+
+  const fetchCourses = async () => {
+    const { data, error } = await supabase.from('courses').select('id, name').order('name');
+    if (data) setCourses(data);
+  };
+
+  const fetchRankings = async () => {
     setLoading(true);
-    if (activeTab === 'rounds') await fetchLeaderboard();
-    else if (activeTab === 'throws') await fetchTopThrows();
-    setLoading(false);
-    setRefreshing(false);
-  };
-
-  const fetchTopThrows = async () => {
     try {
-      const { data, error } = await supabase
-        .from('throws')
-        .select(`
-          id,
-          distance_m,
-          created_at,
-          profiles:player_id ( display_name ),
-          discs:disc_id ( name ),
-          matches (
-            layouts (
-              courses ( name )
-            )
-          )
-        `)
-        .not('distance_m', 'is', null)
-        .order('distance_m', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
-      const formatted: ThrowEntry[] = (data || []).map((t: any) => ({
-        id: t.id,
-        distance_m: t.distance_m,
-        display_name: t.profiles?.display_name || 'Unknown',
-        disc_name: t.discs?.name || 'Unknown Disc',
-        course_name: t.matches?.layouts?.courses?.name || 'Unknown Course',
-        date: t.created_at
-      }));
-
-      setTopThrows(formatted);
-    } catch (error: any) {
-      console.error('Error fetching throws:', error);
+      if (activeFilter === 'avg_diff' || activeFilter === 'best_score' || activeFilter === 'most_rounds' || activeFilter === 'total_strokes') {
+        await fetchScoreBasedRankings();
+      } else if (activeFilter === 'longest_throw') {
+        await fetchThrowBasedRankings();
+      } else if (activeFilter === 'longest_putt') {
+        await fetchPuttRankings();
+      }
+    } catch (error) {
+      console.error('Error fetching rankings:', error);
+      Alert.alert('Error', 'Failed to load rankings.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const fetchLeaderboard = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('matches')
-        .select(`
-          id,
-          date_played,
+  const fetchScoreBasedRankings = async () => {
+    let query = supabase
+      .from('match_players')
+      .select(`
+        player_id,
+        total_score,
+        profiles ( display_name ),
+        matches!inner (
           status,
-          layouts (
+          layout_id,
+          layouts!inner (
             name,
-            courses ( name )
-          ),
-          profiles:created_by ( display_name ),
-          match_players (
-            total_score,
-            profiles:player_id ( display_name )
+            course_id,
+            holes ( par )
           )
-        `)
-        .eq('status', 'completed')
-        .order('date_played', { ascending: false })
-        .limit(20);
+        )
+      `)
+      .eq('matches.status', 'completed');
 
-      if (error) throw error;
-
-      const formattedMatches: MatchEntry[] = (data || []).map((m: any) => ({
-        id: m.id,
-        date_played: m.date_played,
-        layout_name: m.layouts?.name || 'Unknown Layout',
-        course_name: m.layouts?.courses?.name || 'Unknown Course',
-        creator_name: m.profiles?.display_name || 'Unknown',
-        player_count: m.match_players?.length || 0,
-        top_score: m.match_players?.length > 0 
-          ? Math.min(...m.match_players.map((p: any) => p.total_score || Infinity)) 
-          : null,
-        players: (m.match_players || []).map((p: any) => ({
-          display_name: p.profiles?.display_name || 'Guest',
-          total_score: p.total_score
-        }))
-      }));
-
-      setMatches(formattedMatches);
-    } catch (error: any) {
-      console.error('Error fetching leaderboard:', error);
-      Alert.alert('Error', 'Failed to load global board.');
+    if (selectedCourse) {
+      query = query.eq('matches.layouts.course_id', selectedCourse);
     }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const playerMap: Record<string, { 
+      id: string, 
+      name: string, 
+      totalDiff: number, 
+      count: number,
+      bestDiff: number,
+      totalStrokes: number
+    }> = {};
+
+    (data || []).forEach((entry: any) => {
+      if (!entry.matches || !entry.total_score) return;
+      
+      const playerId = entry.player_id;
+      const totalPar = entry.matches.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
+      if (totalPar === 0) return;
+
+      const diff = entry.total_score - totalPar;
+
+      if (!playerMap[playerId]) {
+        playerMap[playerId] = {
+          id: playerId,
+          name: entry.profiles?.display_name || 'Guest',
+          totalDiff: 0,
+          count: 0,
+          bestDiff: Infinity,
+          totalStrokes: 0
+        };
+      }
+
+      playerMap[playerId].totalDiff += diff;
+      playerMap[playerId].count += 1;
+      playerMap[playerId].totalStrokes += entry.total_score;
+      if (diff < playerMap[playerId].bestDiff) {
+        playerMap[playerId].bestDiff = diff;
+      }
+    });
+
+    let result: PlayerRanking[] = Object.values(playerMap).map(p => {
+      let value: number | string = 0;
+      let subValue = '';
+
+      if (activeFilter === 'avg_diff') {
+        value = (p.totalDiff / p.count).toFixed(1);
+        subValue = `${p.count} rounds`;
+      } else if (activeFilter === 'best_score') {
+        value = p.bestDiff;
+        subValue = `Across ${p.count} rounds`;
+      } else if (activeFilter === 'most_rounds') {
+        value = p.count;
+        subValue = `Avg: ${(p.totalDiff / p.count).toFixed(1)}`;
+      } else if (activeFilter === 'total_strokes') {
+        value = p.totalStrokes;
+        subValue = `${p.count} rounds`;
+      }
+
+      return {
+        id: p.id,
+        display_name: p.name,
+        value,
+        subValue
+      };
+    });
+
+    // Sorting
+    if (activeFilter === 'avg_diff' || activeFilter === 'best_score') {
+      result.sort((a, b) => Number(a.value) - Number(b.value));
+    } else {
+      result.sort((a, b) => Number(b.value) - Number(a.value));
+    }
+
+    setRankings(result.slice(0, 20));
+  };
+
+  const fetchThrowBasedRankings = async () => {
+    let query = supabase
+      .from('throws')
+      .select(`
+        player_id,
+        distance_m,
+        profiles ( display_name ),
+        discs ( name ),
+        matches!inner (
+          layout_id,
+          layouts!inner ( course_id )
+        )
+      `)
+      .not('distance_m', 'is', null);
+
+    if (selectedCourse) {
+      query = query.eq('matches.layouts.course_id', selectedCourse);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const playerMax: Record<string, any> = {};
+    (data || []).forEach((t: any) => {
+      if (!playerMax[t.player_id] || t.distance_m > playerMax[t.player_id].distance_m) {
+        playerMax[t.player_id] = {
+          id: t.player_id,
+          display_name: t.profiles?.display_name || 'Unknown',
+          distance_m: t.distance_m,
+          disc_name: t.discs?.name || 'Unknown Disc'
+        };
+      }
+    });
+
+    const result: PlayerRanking[] = Object.values(playerMax)
+      .map(p => ({
+        id: p.id,
+        display_name: p.display_name,
+        value: `${p.distance_m}m`,
+        subValue: p.disc_name
+      }))
+      .sort((a, b) => parseInt(b.value as string) - parseInt(a.value as string))
+      .slice(0, 20);
+
+    setRankings(result);
+  };
+
+  const fetchPuttRankings = async () => {
+    // Rankings for putts - since we don't have a specific 'putt' flag, 
+    // we use the max_putt_m from discs as a proxy for player's best putt achievement
+    const { data, error } = await supabase
+      .from('discs')
+      .select(`
+        player_id,
+        max_putt_m,
+        profiles!inner ( display_name )
+      `)
+      .not('max_putt_m', 'is', null)
+      .order('max_putt_m', { ascending: false });
+
+    if (error) throw error;
+
+    const playerMax: Record<string, any> = {};
+    (data || []).forEach((d: any) => {
+      if (!playerMax[d.player_id] || d.max_putt_m > playerMax[d.player_id].max_putt_m) {
+        playerMax[d.player_id] = {
+          id: d.player_id,
+          display_name: d.profiles?.display_name || 'Unknown',
+          max_putt_m: d.max_putt_m
+        };
+      }
+    });
+
+    const result: PlayerRanking[] = Object.values(playerMax)
+      .map(p => ({
+        id: p.id,
+        display_name: p.display_name,
+        value: `${p.max_putt_m}m`,
+        subValue: 'Personal Best'
+      }))
+      .sort((a, b) => parseInt(b.value as string) - parseInt(a.value as string))
+      .slice(0, 20);
+
+    setRankings(result);
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchData();
+    fetchRankings();
   };
 
-  const renderMatch = ({ item }: { item: MatchEntry }) => (
-    <View style={styles.matchCard}>
-      <View style={styles.matchHeader}>
-        <View style={styles.courseInfo}>
-          <Text style={styles.courseName}>{item.course_name}</Text>
-          <Text style={styles.layoutName}>{item.layout_name}</Text>
+  const renderRankingItem = ({ item, index }: { item: PlayerRanking, index: number }) => {
+    // Data passed to FlatList is already sliced, so index here is 0-based for the list starting from rank 4
+    const actualRank = index + 4;
+
+    return (
+      <View style={styles.rankRow}>
+        <View style={styles.rankIndexContainer}>
+          <Text style={styles.rankIndex}>{actualRank}</Text>
         </View>
-        <Text style={styles.matchDate}>
-          {new Date(item.date_played).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-        </Text>
-      </View>
-
-      <View style={styles.playerList}>
-        {item.players.slice(0, 3).map((p, i) => (
-          <View key={i} style={styles.playerRow}>
-            <Text style={styles.playerName} numberOfLines={1}>{p.display_name}</Text>
-            <Text style={styles.playerScore}>{p.total_score || '-'}</Text>
-          </View>
-        ))}
-        {item.player_count > 3 && (
-          <Text style={styles.morePlayers}>+ {item.player_count - 3} more players</Text>
-        )}
-      </View>
-
-      <View style={styles.matchFooter}>
-        <View style={styles.creatorInfo}>
-          <MaterialCommunityIcons name="account-edit-outline" size={14} color={COLORS.textSecondary} />
-          <Text style={styles.creatorName}>Hosted by {item.creator_name}</Text>
+        <View style={styles.rankPlayerInfo}>
+          <Text style={styles.playerName}>{item.display_name}</Text>
+          <Text style={styles.playerSubValue}>{item.subValue}</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.viewBtn}
-          onPress={() => navigation.navigate('MatchSummary', { matchId: item.id })}
-        >
-          <Text style={styles.viewBtnText}>VIEW ROUND</Text>
-          <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
-        </TouchableOpacity>
+        <View style={styles.valueContainer}>
+          <Text style={[
+            styles.rankValue,
+            activeFilter === 'avg_diff' && Number(item.value) < 0 && { color: COLORS.success }
+          ]}>
+            {item.value === 0 ? 'E' : (typeof item.value === 'number' && item.value > 0 ? `+${item.value}` : item.value)}
+          </Text>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
-  const renderThrow = ({ item, index }: { item: ThrowEntry, index: number }) => (
-    <View style={styles.throwCard}>
-      <View style={[styles.rankBadge, index === 0 && styles.rankGold, index === 1 && styles.rankSilver, index === 2 && styles.rankBronze]}>
-        <Text style={styles.rankText}>{index + 1}</Text>
-      </View>
-      <View style={styles.throwInfo}>
-        <Text style={styles.throwPlayer}>{item.display_name}</Text>
-        <Text style={styles.throwSubtext}>{item.disc_name} • {item.course_name}</Text>
-      </View>
-      <View style={styles.throwValue}>
-        <Text style={styles.distanceValue}>{item.distance_m}</Text>
-        <Text style={styles.unitText}>m</Text>
-      </View>
-    </View>
-  );
+  const filters: { label: string, value: FilterType, icon: any }[] = [
+    { label: 'Avg Diff', value: 'avg_diff', icon: 'calculator' },
+    { label: 'Best Round', value: 'best_score', icon: 'trophy' },
+    { label: 'Max Throw', value: 'longest_throw', icon: 'arrow-up-right' },
+    { label: 'Max Putt', value: 'longest_putt', icon: 'target' },
+    { label: 'Most Rounds', value: 'most_rounds', icon: 'mace' },
+    { label: 'Total Strokes', value: 'total_strokes', icon: 'format-list-numbered' },
+  ];
 
-  const renderPlayer = ({ item, index }: { item: PlayerRanking, index: number }) => (
-    <View style={styles.throwCard}>
-      <View style={[styles.rankBadge, index === 0 && styles.rankGold, index === 1 && styles.rankSilver, index === 2 && styles.rankBronze]}>
-        <Text style={styles.rankText}>{index + 1}</Text>
-      </View>
-      <View style={styles.throwInfo}>
-        <Text style={styles.throwPlayer}>{item.display_name}</Text>
-        <Text style={styles.throwSubtext}>{item.rounds_played} rounds • Best: {item.best_score === 0 ? 'E' : (item.best_score > 0 ? `+${item.best_score}` : item.best_score)}</Text>
-      </View>
-      <View style={styles.throwValue}>
-        <Text style={[
-          styles.distanceValue,
-          item.avg_diff < 0 && { color: COLORS.success },
-          item.avg_diff > 0 && { color: '#FF5252' }
-        ]}>
-          {item.avg_diff === 0 ? 'E' : (item.avg_diff > 0 ? `+${item.avg_diff.toFixed(1)}` : item.avg_diff.toFixed(1))}
-        </Text>
-      </View>
-    </View>
-  );
+  const selectedCourseName = selectedCourse ? courses.find(c => c.id === selectedCourse)?.name : 'All Courses';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Leaderboard</Text>
-        <View style={styles.tabBar}>
+        <Text style={styles.title}>Rankings</Text>
+        
+        {/* Expandable Course Filter */}
+        <View style={styles.courseFilterWrapper}>
           <TouchableOpacity 
-            style={[styles.tab, activeTab === 'rounds' && styles.activeTab]} 
-            onPress={() => setActiveTab('rounds')}
+            style={styles.coursePickerTrigger}
+            onPress={() => setCoursePickerOpen(!coursePickerOpen)}
           >
-            <Text style={[styles.tabText, activeTab === 'rounds' && styles.activeTabText]}>Rounds</Text>
+            <View style={styles.coursePickerLabel}>
+              <MaterialCommunityIcons name="map-marker" size={16} color={COLORS.primary} />
+              <Text style={styles.coursePickerText}>{selectedCourseName}</Text>
+            </View>
+            <MaterialCommunityIcons 
+              name={coursePickerOpen ? "chevron-up" : "chevron-down"} 
+              size={20} 
+              color={COLORS.textSecondary} 
+            />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'throws' && styles.activeTab]} 
-            onPress={() => setActiveTab('throws')}
-          >
-            <Text style={[styles.tabText, activeTab === 'throws' && styles.activeTabText]}>Top Throws</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'players' && styles.activeTab]} 
-            onPress={() => setActiveTab('players')}
-          >
-            <Text style={[styles.tabText, activeTab === 'players' && styles.activeTabText]}>Players</Text>
-          </TouchableOpacity>
+
+          {coursePickerOpen && (
+            <View style={styles.courseDropdown}>
+              <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                <TouchableOpacity 
+                  style={[styles.dropdownItem, selectedCourse === null && styles.activeDropdownItem]}
+                  onPress={() => {
+                    setSelectedCourse(null);
+                    setCoursePickerOpen(false);
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, selectedCourse === null && styles.activeDropdownItemText]}>
+                    All Courses
+                  </Text>
+                </TouchableOpacity>
+                {courses.map(course => (
+                  <TouchableOpacity 
+                    key={course.id}
+                    style={[styles.dropdownItem, selectedCourse === course.id && styles.activeDropdownItem]}
+                    onPress={() => {
+                      setSelectedCourse(course.id);
+                      setCoursePickerOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, selectedCourse === course.id && styles.activeDropdownItemText]}>
+                      {course.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        {/* Wrapping Stat Filters */}
+        <View style={styles.filterGrid}>
+          {filters.map((f) => (
+            <TouchableOpacity 
+              key={f.value}
+              style={[styles.filterTab, activeFilter === f.value && styles.activeFilterTab]}
+              onPress={() => setActiveFilter(f.value)}
+            >
+              <MaterialCommunityIcons 
+                name={f.icon} 
+                size={14} 
+                color={activeFilter === f.value ? COLORS.onPrimary : COLORS.textSecondary} 
+              />
+              <Text style={[styles.filterTabText, activeFilter === f.value && styles.activeFilterTabText]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -258,23 +374,17 @@ export function LeaderboardScreen() {
         </View>
       ) : (
         <FlatList
-          data={activeTab === 'rounds' ? matches : (activeTab === 'throws' ? topThrows : playerRankings)}
+          data={rankings.slice(3)}
           keyExtractor={(item) => item.id}
-          renderItem={
-            activeTab === 'rounds' ? renderMatch : 
-            (activeTab === 'throws' ? renderThrow as any : renderPlayer as any)
-          }
+          renderItem={renderRankingItem}
+          ListHeaderComponent={<PodiumView players={rankings} />}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={onRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons 
-                name={activeTab === 'rounds' ? "trophy-outline" : (activeTab === 'throws' ? "arrow-up-right-bold" : "account-group-outline")} 
-                size={64} 
-                color={COLORS.borderDark} 
-              />
-              <Text style={styles.emptyText}>No data available yet.</Text>
+              <MaterialCommunityIcons name="account-group-outline" size={64} color={COLORS.borderDark} />
+              <Text style={styles.emptyText}>No rankings found.</Text>
             </View>
           }
         />
@@ -289,7 +399,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
-    paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 8,
   },
@@ -299,180 +408,145 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.5,
     marginBottom: 16,
+    paddingHorizontal: 20,
   },
-  tabBar: {
+  courseFilterWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    zIndex: 10,
+  },
+  coursePickerTrigger: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceLight,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  coursePickerLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  coursePickerText: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  courseDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    maxHeight: 200,
+  },
+  dropdownScroll: {
+    padding: 4,
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  activeDropdownItem: {
+    backgroundColor: 'rgba(144, 202, 249, 0.1)',
+  },
+  dropdownItemText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeDropdownItemText: {
+    color: COLORS.primary,
+  },
+  filterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    gap: 8,
     marginBottom: 8,
   },
-  tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-  },
-  activeTab: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  tabText: {
-    color: COLORS.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  activeTabText: {
-    color: COLORS.onPrimary,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  matchCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-  },
-  matchHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  courseInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  courseName: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  layoutName: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  matchDate: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  playerList: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  playerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  playerName: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  playerScore: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '700',
-    fontFamily: 'JetBrains Mono',
-  },
-  morePlayers: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-  matchFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  creatorInfo: {
+  filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  creatorName: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-  },
-  viewBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  viewBtnText: {
-    color: COLORS.primary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  throwCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.borderDark,
   },
-  rankBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
+  activeFilterTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
-  rankGold: { backgroundColor: '#FFD700' },
-  rankSilver: { backgroundColor: '#C0C0C0' },
-  rankBronze: { backgroundColor: '#CD7F32' },
-  rankText: {
-    color: '#000',
+  filterTabText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  activeFilterTabText: {
+    color: COLORS.onPrimary,
+  },
+  listContent: {
+    paddingBottom: 100,
+  },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  rankIndexContainer: {
+    width: 30,
+    alignItems: 'center',
+  },
+  rankIndex: {
+    color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: '800',
   },
-  throwInfo: {
+  rankPlayerInfo: {
     flex: 1,
+    marginLeft: 12,
   },
-  throwPlayer: {
+  playerName: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: '700',
   },
-  throwSubtext: {
+  playerSubValue: {
     color: COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
-  throwValue: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 2,
+  valueContainer: {
+    alignItems: 'flex-end',
   },
-  distanceValue: {
-    color: COLORS.primary,
-    fontSize: 24,
+  rankValue: {
+    color: COLORS.text,
+    fontSize: 18,
     fontWeight: '800',
     fontFamily: 'JetBrains Mono',
-  },
-  unitText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
   },
   centered: {
     flex: 1,
@@ -480,59 +554,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyContainer: {
-    marginTop: 100,
+    marginTop: 60,
     alignItems: 'center',
     paddingHorizontal: 40,
   },
   emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginTop: 20,
-    textAlign: 'center',
-  },
-});
-layer: {
-    color: COLORS.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  throwSubtext: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  throwValue: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 2,
-  },
-  distanceValue: {
-    color: COLORS.primary,
-    fontSize: 24,
-    fontWeight: '800',
-    fontFamily: 'JetBrains Mono',
-  },
-  unitText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: '600',
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    marginTop: 100,
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginTop: 20,
+    color: COLORS.textSecondary,
+    marginTop: 16,
     textAlign: 'center',
   },
 });

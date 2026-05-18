@@ -1,13 +1,77 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Svg, Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 
+function RecentPerformanceChart({ data }: { data: { label: string, diff: number }[] }) {
+  if (data.length === 0) return null;
+
+  const chartHeight = 150;
+  // Use a percentage-based or flexible width if possible, but for simplicity let's use a fixed one that fits
+  const chartWidth = 300; 
+  const padding = 20;
+  
+  // We want to map: 
+  // -8 -> top
+  // +4 -> bottom (to leave room for +2 label)
+  const topValue = -8;
+  const bottomValue = 4;
+  const range = bottomValue - topValue;
+
+  const getY = (val: number) => {
+    const clampedVal = Math.max(topValue, Math.min(bottomValue, val));
+    return padding + ((clampedVal - topValue) / range) * (chartHeight - 2 * padding);
+  };
+
+  const getX = (index: number) => {
+    if (data.length <= 1) return chartWidth / 2;
+    return padding + (index / (data.length - 1)) * (chartWidth - 2 * padding);
+  };
+
+  const points = data.map((d, i) => ({ x: getX(i), y: getY(d.diff) }));
+  
+  const linePath = points.length > 0 
+    ? `M ${points[0].x},${points[0].y} ${points.slice(1).map(p => `L ${p.x},${p.y}`).join(' ')}`
+    : '';
+    
+  const areaPath = points.length > 0
+    ? `${linePath} L ${points[points.length - 1].x},${chartHeight} L ${points[0].x},${chartHeight} Z`
+    : '';
+
+  return (
+    <View style={styles.chartWrapper}>
+      <View style={styles.yAxis}>
+        <Text style={styles.yAxisLabel}>-8</Text>
+        <Text style={styles.yAxisLabel}>-4</Text>
+        <Text style={styles.yAxisLabel}>E</Text>
+        <Text style={styles.yAxisLabel}>+2</Text>
+      </View>
+      <View style={styles.svgContainer}>
+        <Svg height={chartHeight} width={chartWidth}>
+          <Defs>
+            <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={COLORS.primary} stopOpacity="0.4" />
+              <Stop offset="1" stopColor={COLORS.primary} stopOpacity="0" />
+            </LinearGradient>
+          </Defs>
+          <Path d={areaPath} fill="url(#grad)" />
+          <Path d={linePath} fill="none" stroke={COLORS.primary} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {points.map((p, i) => (
+            <Circle key={i} cx={p.x} cy={p.y} r="4" fill={COLORS.background} stroke={COLORS.primary} strokeWidth="2" />
+          ))}
+        </Svg>
+      </View>
+    </View>
+  );
+}
+
 export function ProfileScreen({ route, navigation }: any) {
-  const { name, email } = route.params || {};
-  const displayName = name || 'Lucas';
+  const [displayName, setDisplayName] = useState('Player');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     roundsPlayed: 0,
@@ -16,14 +80,19 @@ export function ProfileScreen({ route, navigation }: any) {
     bestHoleInfo: '',
     totalThrows: 0,
     longestThrow: 0,
-    bestRound: 'N/A'
+    bestRound: 'N/A',
+    birdies: 0,
+    eagles: 0
   });
+  const [recentPerformance, setRecentPerformance] = useState<{label: string, diff: number}[]>([]);
 
-  useEffect(() => {
-    fetchProfileStats();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchProfileData();
+    }, [])
+  );
 
-  const fetchProfileStats = async () => {
+  const fetchProfileData = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
@@ -31,11 +100,13 @@ export function ProfileScreen({ route, navigation }: any) {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, display_name, avatar_url')
         .eq('auth_id', user.id)
         .single();
 
       if (!profile) return;
+      setDisplayName(profile.display_name);
+      setAvatarUrl(profile.avatar_url);
 
       // 1. Fetch Rounds Played
       const { count: roundsCount } = await supabase
@@ -53,14 +124,14 @@ export function ProfileScreen({ route, navigation }: any) {
       
       const longestThrow = throwData?.[0]?.distance_m || 0;
 
-      // 3. Fetch Best Round (lowest score relative to par)
+      // 3. Fetch Best Round & Recent Rounds
       const { data: bestRoundData } = await supabase
         .from('match_players')
         .select(`
           total_score,
           matches (
+            date_played,
             layouts (
-              hole_count,
               holes ( par )
             )
           )
@@ -69,7 +140,7 @@ export function ProfileScreen({ route, navigation }: any) {
         .not('total_score', 'is', null);
 
       let bestRoundDiff = Infinity;
-      if (bestRoundData && bestRoundData.length > 0) {
+      if (bestRoundData) {
         bestRoundData.forEach((r: any) => {
           const totalPar = r.matches?.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
           if (totalPar > 0) {
@@ -77,30 +148,52 @@ export function ProfileScreen({ route, navigation }: any) {
             if (diff < bestRoundDiff) bestRoundDiff = diff;
           }
         });
+
+        // Set recent performance (last 5 rounds)
+        const recentRounds = [...bestRoundData]
+          .sort((a, b) => new Date(b.matches.date_played).getTime() - new Date(a.matches.date_played).getTime())
+          .slice(0, 5)
+          .reverse()
+          .map(r => {
+            const totalPar = r.matches?.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
+            const date = new Date(r.matches.date_played);
+            return {
+              label: `${date.getDate()}/${date.getMonth() + 1}`,
+              diff: (r.total_score || 0) - totalPar
+            };
+          });
+        setRecentPerformance(recentRounds);
       }
 
-      // 4. Fetch All Scores for calculations
+      // 4. Fetch All Scores for counts and performance
       const { data: scoresData } = await supabase
         .from('scores')
         .select(`
           strokes,
+          created_at,
           holes ( par, hole_number )
         `)
         .eq('player_id', profile.id)
-        .not('strokes', 'is', null);
+        .not('strokes', 'is', null)
+        .order('created_at', { ascending: false });
 
       let totalStrokes = 0;
       let totalPar = 0;
+      let birdies = 0;
+      let eagles = 0;
       let bestHoleDiff = Infinity;
       let bestHoleStr = 'N/A';
       let bestHoleDetails = '';
 
-      if (scoresData && scoresData.length > 0) {
+      if (scoresData) {
         scoresData.forEach((s: any) => {
           totalStrokes += s.strokes;
           totalPar += s.holes.par;
           const diff = s.strokes - s.holes.par;
           
+          if (diff === -1) birdies++;
+          if (diff <= -2) eagles++;
+
           if (diff < bestHoleDiff) {
             bestHoleDiff = diff;
             if (diff <= -3) bestHoleStr = 'Albatross+';
@@ -121,11 +214,13 @@ export function ProfileScreen({ route, navigation }: any) {
         bestHoleInfo: bestHoleDetails,
         totalThrows: totalStrokes,
         longestThrow,
-        bestRound: bestRoundDiff === Infinity ? 'N/A' : (bestRoundDiff === 0 ? 'E' : (bestRoundDiff > 0 ? `+${bestRoundDiff}` : bestRoundDiff))
+        bestRound: bestRoundDiff === Infinity ? 'N/A' : (bestRoundDiff === 0 ? 'E' : (bestRoundDiff > 0 ? `+${bestRoundDiff}` : bestRoundDiff)),
+        birdies,
+        eagles
       });
 
     } catch (error) {
-      console.error('Error fetching profile stats:', error);
+      console.error('Error fetching profile data:', error);
     } finally {
       setLoading(false);
     }
@@ -148,12 +243,19 @@ export function ProfileScreen({ route, navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={styles.header}>
+        <View style={{ width: 32 }} />
+        <Text style={styles.headerTitle}>Profile</Text>
+        <TouchableOpacity style={styles.settingsButton} onPress={() => navigation.navigate('EditProfile')}>
+          <Ionicons name="settings-outline" size={24} color={COLORS.text} />
+        </TouchableOpacity>
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
             <Image 
-              source={{ uri: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop' }} 
+              source={{ uri: avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop' }} 
               style={styles.avatar} 
             />
             <View style={styles.onlineBadge} />
@@ -183,6 +285,23 @@ export function ProfileScreen({ route, navigation }: any) {
             ]}>
               {stats.avgScore === 0 ? 'E' : (stats.avgScore > 0 ? `+${stats.avgScore.toFixed(1)}` : stats.avgScore.toFixed(1))}
             </Text>
+          </View>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="bird" size={16} color={COLORS.success} />
+              <Text style={styles.statLabel}>BIRDIES</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.birdies}</Text>
+          </View>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="crown-outline" size={16} color="#FFD700" />
+              <Text style={styles.statLabel}>EAGLES+</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.eagles}</Text>
           </View>
         </View>
 
@@ -246,8 +365,21 @@ export function ProfileScreen({ route, navigation }: any) {
 
         {/* Recent Performance */}
         <Text style={styles.sectionTitle}>Recent Performance</Text>
-        <View style={styles.chartPlaceholder}>
-          <Text style={{ color: COLORS.textMuted, textAlign: 'center' }}>Chart Placeholder</Text>
+        <View style={styles.performanceContainer}>
+          {recentPerformance.length > 0 ? (
+            <RecentPerformanceChart data={recentPerformance} />
+          ) : (
+            <Text style={styles.emptyPerformance}>No recent round data available.</Text>
+          )}
+          <View style={styles.performanceFooter}>
+            <Text style={styles.performanceSubtext}>
+              Avg. Recent Diff: {
+                recentPerformance.length > 0 
+                  ? (recentPerformance.reduce((acc, curr) => acc + curr.diff, 0) / recentPerformance.length).toFixed(1)
+                  : 'N/A'
+              }
+            </Text>
+          </View>
         </View>
 
         {/* Logout Button */}
@@ -265,6 +397,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background,
+  },
+  headerTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  settingsButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     padding: 20,
@@ -390,12 +541,49 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 16,
   },
-  chartPlaceholder: {
-    height: 150,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    justifyContent: 'center',
+  performanceContainer: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  chartWrapper: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingRight: 10,
+  },
+  yAxis: {
+    justifyContent: 'space-between',
+    height: 110, // Matches chart internal padding area roughly
+    paddingVertical: 10,
+    marginRight: 10,
+  },
+  yAxisLabel: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 10,
+    fontWeight: '600',
+    width: 20,
+    textAlign: 'right',
+  },
+  svgContainer: {
+    flex: 1,
+  },
+  performanceFooter: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+  },
+  performanceSubtext: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyPerformance: {
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    paddingVertical: 40,
   },
   logoutButton: {
     flexDirection: 'row',
