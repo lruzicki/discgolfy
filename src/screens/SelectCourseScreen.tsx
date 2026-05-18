@@ -233,21 +233,6 @@ export function SelectCourseScreen({ navigation }: any) {
           </View>
         )}
       </ScrollView>
-
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={handlePlayNav}>
-          <Ionicons name="play-circle-outline" size={24} color={COLORS.primary} />
-          <Text style={[styles.navText, { color: COLORS.primary }]}>Play</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="podium-outline" size={24} color={COLORS.textSecondary} />
-          <Text style={styles.navText}>Leaderboard</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person-outline" size={24} color={COLORS.textSecondary} />
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -416,23 +401,5 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
   },
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#1C1C1E',
-    paddingVertical: 12,
-    paddingBottom: 24, // iOS safe area padding
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-  },
-  navItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  navText: {
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
-  },
 });
+
