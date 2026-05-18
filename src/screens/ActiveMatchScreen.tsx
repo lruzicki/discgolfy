@@ -328,6 +328,7 @@ export function ActiveMatchScreen() {
   const [tempEndCoords, setTempEndCoords] = useState<{lat: number, lng: number} | null>(null);
   const [recordedThrows, setRecordedThrows] = useState<ThrowRecord[]>([]);
   const [activeNavItemIndex, setActiveNavItemIndex] = useState(0);
+  const [isThrowHistoryVisible, setIsThrowHistoryVisible] = useState(false);
 
   const navItems: any[] = [];
   holes.forEach((hole, idx) => {
@@ -619,7 +620,7 @@ export function ActiveMatchScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.iconBtn}
-                  onPress={() => Alert.alert('History', 'Throw history is being developed.')}
+                  onPress={() => setIsThrowHistoryVisible(true)}
                 >
                   <MaterialCommunityIcons name="history" size={22} color={COLORS.textSecondary} />
                 </TouchableOpacity>
@@ -701,6 +702,48 @@ export function ActiveMatchScreen() {
         </ScrollView>
       </View>
 
+      <Modal visible={isThrowHistoryVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Throw History</Text>
+              <TouchableOpacity onPress={() => setIsThrowHistoryVisible(false)}>
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubTitle}>Current Hole: {currentHole?.hole_number}</Text>
+            
+            <FlatList
+              data={recordedThrows}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.historyItem}>
+                  <View style={styles.historyRank}>
+                    <Text style={styles.historyRankText}>{item.throw_number}</Text>
+                  </View>
+                  <View style={styles.historyInfo}>
+                    <Text style={styles.historyDiscName}>
+                      {item.discs?.name || 'Unknown Disc'}
+                    </Text>
+                    {item.discs?.color_rgba && (
+                      <View style={[styles.historyDiscColor, { backgroundColor: item.discs.color_rgba }]} />
+                    )}
+                  </View>
+                  <Text style={styles.historyDistance}>{Math.round(item.distance_m)}m</Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyHistory}>
+                  <MaterialCommunityIcons name="history" size={48} color={COLORS.borderDark} />
+                  <Text style={styles.emptyHistoryText}>No throws recorded for this hole.</Text>
+                </View>
+              }
+              contentContainerStyle={{ paddingBottom: 20 }}
+            />
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={isDiscModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -715,10 +758,24 @@ export function ActiveMatchScreen() {
                 </TouchableOpacity>
               )}
               ListHeaderComponent={
-                <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(null)}>
-                  <View style={[styles.discColor, { backgroundColor: '#555' }]} />
-                  <Text style={styles.discName}>Unknown Disc</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity 
+                    style={[styles.discItem, { borderBottomColor: COLORS.primary, borderBottomWidth: 1, marginBottom: 8 }]} 
+                    onPress={() => {
+                      setIsDiscModalVisible(false);
+                      navigation.navigate('Profile', { screen: 'AddEditDisc' });
+                    }}
+                  >
+                    <View style={[styles.discColor, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
+                      <Ionicons name="add" size={14} color={COLORS.onPrimary} />
+                    </View>
+                    <Text style={[styles.discName, { color: COLORS.primary, fontWeight: '700' }]}>Add New Disc</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(null)}>
+                    <View style={[styles.discColor, { backgroundColor: '#555' }]} />
+                    <Text style={styles.discName}>Unknown Disc</Text>
+                  </TouchableOpacity>
+                </>
               }
             />
             <TouchableOpacity style={styles.modalClose} onPress={() => setIsDiscModalVisible(false)}>
@@ -775,8 +832,62 @@ const styles = StyleSheet.create({
   finishMatchBtn: { paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(144, 202, 249, 0.1)', borderRadius: 12 },
   finishMatchText: { color: COLORS.primary, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
-  modalTitle: { color: '#FFF', fontSize: 19, fontWeight: '600', marginBottom: 20 },
+  modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  modalTitle: { color: '#FFF', fontSize: 19, fontWeight: '600' },
+  modalSubTitle: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 20 },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  historyRank: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: COLORS.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  historyRankText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  historyInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyDiscName: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  historyDiscColor: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  historyDistance: {
+    color: COLORS.primary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  emptyHistory: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyHistoryText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
   discItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   discColor: { width: 18, height: 18, borderRadius: 9, marginRight: 12 },
   discName: { color: '#FFF', fontSize: 16 },
