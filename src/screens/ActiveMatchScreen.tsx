@@ -65,14 +65,27 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
     chunks.push(holes.slice(i, i + 9));
   }
 
+  // Calculate total scores for leaderboard
+  const leaderboard = players.map(player => {
+    let totalStrokes = 0;
+    let totalPar = 0;
+    holes.forEach(h => {
+      const s = scores[h.id]?.[player.id];
+      if (s) {
+        totalStrokes += s;
+        totalPar += h.par;
+      }
+    });
+    return {
+      ...player,
+      totalStrokes,
+      totalPar,
+      diff: totalStrokes - totalPar
+    };
+  }).sort((a, b) => a.diff - b.diff);
+
   const getScoreStyle = (diff: number | null) => {
     if (diff === null || diff === 0 || diff === -1 || diff === -2) return {};
-    
-    // Positive diffs (Bogeys) - Light to Dark Blue Gradient concept
-    // +1: #E3F2FD (Very Light Blue)
-    // +2: #90CAF9 (Light Blue)
-    // +3: #42A5F5 (Blue)
-    // 4+: #1E88E5 (Dark Blue)
     
     if (diff === 1) return { backgroundColor: '#E3F2FD', color: '#0D47A1' };
     if (diff === 2) return { backgroundColor: '#90CAF9', color: '#0D47A1' };
@@ -81,7 +94,32 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
   };
 
   return (
-    <ScrollView style={styles.summaryContainer}>
+    <ScrollView style={styles.summaryContainer} contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Total Leaderboard Section */}
+      <View style={styles.leaderboardSection}>
+        <Text style={styles.leaderboardTitle}>ROUND LEADERBOARD</Text>
+        {leaderboard.map((p, idx) => (
+          <View key={p.id} style={styles.leaderboardRow}>
+            <View style={styles.leaderboardRank}>
+              <Text style={styles.leaderboardRankText}>{idx + 1}</Text>
+            </View>
+            <Text style={styles.leaderboardName}>{p.display_name}</Text>
+            <View style={styles.leaderboardScore}>
+              <Text style={styles.leaderboardStrokes}>{p.totalStrokes}</Text>
+              <Text style={[
+                styles.leaderboardDiff,
+                p.diff < 0 && styles.scoreUnder,
+                p.diff > 0 && styles.scoreOver,
+                p.diff === 0 && { color: COLORS.textSecondary }
+              ]}>
+                ({p.diff === 0 ? 'E' : (p.diff > 0 ? `+${p.diff}` : p.diff)})
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <Text style={[styles.leaderboardTitle, { marginTop: 12, marginBottom: 16 }]}>SCORECARD DETAILS</Text>
       {chunks.map((chunk, chunkIdx) => (
         <View key={chunkIdx} style={styles.summaryTable}>
           {/* Header Row: Hole Numbers */}
@@ -746,8 +784,65 @@ const styles = StyleSheet.create({
   modalCloseText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
   avatarTextSmall: { color: '#90CAF9', fontSize: 13, fontWeight: '700' },
   // Summary Styles
-  summaryContent: { flex: 1, backgroundColor: '#000' },
+  summaryContent: { flex: 1, backgroundColor: COLORS.background },
   summaryContainer: { flex: 1, padding: 16 },
+  leaderboardSection: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  leaderboardTitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  leaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  leaderboardRank: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  leaderboardRankText: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  leaderboardName: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  leaderboardScore: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  leaderboardStrokes: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  leaderboardDiff: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
   summaryRow: { flexDirection: 'row', marginBottom: 2 },
   summaryCell: { flex: 1, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
