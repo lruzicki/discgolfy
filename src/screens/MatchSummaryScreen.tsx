@@ -112,7 +112,7 @@ export function MatchSummaryScreen() {
 
   const handleDone = () => {
     resetMatch();
-    navigation.navigate('Profile');
+    navigation.navigate('Profile', { screen: 'ProfileHome' });
   };
 
   if (loading) {

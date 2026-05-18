@@ -17,6 +17,7 @@ import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { useMatchStore } from '../store/useMatchStore';
 import { useNavigation } from '@react-navigation/native';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../lib/utils';
 
@@ -30,6 +31,10 @@ interface Hole {
   hole_number: number;
   par: number;
   distance_m: number;
+  tee_latitude: number;
+  tee_longitude: number;
+  basket_latitude: number;
+  basket_longitude: number;
 }
 
 interface Disc {
@@ -53,6 +58,177 @@ interface ThrowRecord {
     color_rgba: string;
   } | null;
 }
+
+const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Player[], scores: any }) => {
+  const chunks = [];
+  for (let i = 0; i < holes.length; i += 9) {
+    chunks.push(holes.slice(i, i + 9));
+  }
+
+  const getScoreStyle = (diff: number | null) => {
+    if (diff === null || diff === 0 || diff === -1 || diff === -2) return {};
+    
+    // Positive diffs (Bogeys) - Light to Dark Blue Gradient concept
+    // +1: #E3F2FD (Very Light Blue)
+    // +2: #90CAF9 (Light Blue)
+    // +3: #42A5F5 (Blue)
+    // 4+: #1E88E5 (Dark Blue)
+    
+    if (diff === 1) return { backgroundColor: '#E3F2FD', color: '#0D47A1' };
+    if (diff === 2) return { backgroundColor: '#90CAF9', color: '#0D47A1' };
+    if (diff === 3) return { backgroundColor: '#42A5F5', color: '#FFFFFF' };
+    return { backgroundColor: '#1E88E5', color: '#FFFFFF' };
+  };
+
+  return (
+    <ScrollView style={styles.summaryContainer}>
+      {chunks.map((chunk, chunkIdx) => (
+        <View key={chunkIdx} style={styles.summaryTable}>
+          {/* Header Row: Hole Numbers */}
+          <View style={styles.summaryRow}>
+            <View style={[styles.summaryCell, styles.summaryCellSticky]}>
+              <Text style={styles.summaryLabel}>HOLE</Text>
+            </View>
+            {chunk.map(h => (
+              <View key={h.id} style={styles.summaryCell}>
+                <Text style={styles.summaryHoleNum}>{h.hole_number}</Text>
+              </View>
+            ))}
+          </View>
+          {/* Par Row */}
+          <View style={styles.summaryRow}>
+            <View style={[styles.summaryCell, styles.summaryCellSticky]}>
+              <Text style={styles.summaryLabel}>PAR</Text>
+            </View>
+            {chunk.map(h => (
+              <View key={h.id} style={styles.summaryCell}>
+                <Text style={styles.summaryPar}>{h.par}</Text>
+              </View>
+            ))}
+          </View>
+          {/* Player Rows */}
+          {players.map(player => (
+            <View key={player.id} style={styles.summaryRow}>
+              <View style={[styles.summaryCell, styles.summaryCellSticky]}>
+                <Text style={styles.summaryPlayerName} numberOfLines={1}>{player.display_name}</Text>
+              </View>
+              {chunk.map(h => {
+                const strokes = scores[h.id]?.[player.id];
+                const diff = strokes ? strokes - h.par : null;
+                const scoreStyle = getScoreStyle(diff);
+                return (
+                  <View key={h.id} style={[styles.summaryCell, scoreStyle]}>
+                    <Text style={[
+                      styles.summaryValue,
+                      scoreStyle.color ? { color: scoreStyle.color } : { color: '#FFF' }
+                    ]}>
+                      {strokes || '-'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+};
+
+const MapComponent = ({ hole }: { hole: Hole | null }) => {
+  const [isSatellite, setIsSatellite] = useState(false);
+
+  if (!hole) return null;
+
+  const teeLat = Number(hole.tee_latitude);
+  const teeLng = Number(hole.tee_longitude);
+  const basketLat = Number(hole.basket_latitude);
+  const basketLng = Number(hole.basket_longitude);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body { margin: 0; padding: 0; background: #000; }
+          #map { height: 100vh; width: 100vw; }
+          ${!isSatellite ? '.leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }' : ''}
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+          });
+          
+          const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+          const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+          if (${isSatellite}) {
+            satellite.addTo(map);
+          } else {
+            osm.addTo(map);
+          }
+
+          const tee = [${teeLat}, ${teeLng}];
+          const basket = [${basketLat}, ${basketLng}];
+
+          const teeIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: "<div style='background-color:#FFC107;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:black;font-weight:bold;font-size:10px;'>T</div>",
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+
+          const basketIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: "<div style='background-color:#E64A19;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:10px;'>B</div>",
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+
+          L.marker(tee, {icon: teeIcon}).addTo(map);
+          L.marker(basket, {icon: basketIcon}).addTo(map);
+
+          const line = L.polyline([tee, basket], {
+            color: '${isSatellite ? '#FFF' : COLORS.primary}',
+            weight: 3,
+            dashArray: '5, 10'
+          }).addTo(map);
+
+          map.fitBounds(line.getBounds(), { padding: [40, 40] });
+        </script>
+      </body>
+    </html>
+  `;
+
+  return (
+    <View style={styles.mapContainer}>
+      <WebView 
+        key={isSatellite ? 'sat' : 'osm'}
+        originWhitelist={['*']}
+        source={{ html }}
+        style={styles.map}
+        scrollEnabled={false}
+      />
+      <TouchableOpacity 
+        style={styles.mapToggle} 
+        onPress={() => setIsSatellite(!isSatellite)}
+      >
+        <MaterialCommunityIcons 
+          name={isSatellite ? "map-outline" : "earth"} 
+          size={20} 
+          color="#FFF" 
+        />
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 export function ActiveMatchScreen() {
   const navigation = useNavigation<any>();
@@ -79,6 +255,21 @@ export function ActiveMatchScreen() {
   const [isDiscModalVisible, setIsDiscModalVisible] = useState(false);
   const [tempEndCoords, setTempEndCoords] = useState<{lat: number, lng: number} | null>(null);
   const [recordedThrows, setRecordedThrows] = useState<ThrowRecord[]>([]);
+  const [activeNavItemIndex, setActiveNavItemIndex] = useState(0);
+
+  const navItems: any[] = [];
+  holes.forEach((hole, idx) => {
+    navItems.push({ type: 'hole', data: hole, holeIndex: idx });
+    if (hole.hole_number === 9 && holes.length > 9) {
+      navItems.push({ type: 'summary', title: 'SUM', start: 0, end: 8 });
+    }
+  });
+  if (holes.length > 0) {
+    navItems.push({ type: 'summary', title: 'SUM', start: 0, end: holes.length - 1 });
+  }
+
+  const activeItem = navItems[activeNavItemIndex] || (holes.length > 0 ? { type: 'hole', data: holes[activeHoleIndex], holeIndex: activeHoleIndex } : null);
+  const currentHole = activeItem?.type === 'hole' ? activeItem.data : null;
 
   useEffect(() => {
     if (!matchId) {
@@ -88,7 +279,6 @@ export function ActiveMatchScreen() {
     fetchMatchData();
     fetchDiscs();
 
-    // Listen for app state changes to trigger sync
     const subscription = AppState.addEventListener('change', nextAppState => {
       if (appState.current.match(/active/) && nextAppState === 'background') {
         triggerSync();
@@ -100,7 +290,6 @@ export function ActiveMatchScreen() {
   }, []);
 
   const fetchThrowsForHole = async () => {
-    const currentHole = holes[activeHoleIndex];
     if (!currentHole || !matchId) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -132,8 +321,6 @@ export function ActiveMatchScreen() {
 
       if (error) throw error;
       
-      // Need to type cast data because Supabase returns discs as an array or object depending on relation
-      // In this case it's one-to-one (belongs to), so it's a single object or null.
       const formattedData: ThrowRecord[] = (data || []).map((t: any) => ({
         id: t.id,
         throw_number: t.throw_number,
@@ -149,15 +336,15 @@ export function ActiveMatchScreen() {
   };
 
   useEffect(() => {
-    if (holes.length > 0) {
+    if (holes.length > 0 && activeItem?.type === 'hole') {
       fetchThrowsForHole();
+      setActiveHoleIndex(activeItem.holeIndex);
     }
-  }, [activeHoleIndex, holes, matchId]);
+  }, [activeNavItemIndex, holes, matchId]);
 
   const fetchMatchData = async () => {
     try {
       setLoading(true);
-      
       const { data: holeData, error: holeError } = await supabase
         .from('holes')
         .select('*')
@@ -171,10 +358,7 @@ export function ActiveMatchScreen() {
         .from('match_players')
         .select(`
           player_id,
-          profiles (
-            id,
-            display_name
-          )
+          profiles ( id, display_name )
         `)
         .eq('match_id', matchId);
 
@@ -186,8 +370,11 @@ export function ActiveMatchScreen() {
       }));
       setPlayers(mappedPlayers);
 
+      if (!holeData || holeData.length === 0) {
+        Alert.alert('Error', 'No holes found for this layout.');
+      }
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      Alert.alert('Error', error.message || 'Failed to load match data');
     } finally {
       setLoading(false);
     }
@@ -197,13 +384,11 @@ export function ActiveMatchScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .eq('auth_id', user.id)
         .single();
-
       if (!profile) return;
 
       const { data } = await supabase
@@ -211,37 +396,32 @@ export function ActiveMatchScreen() {
         .select('id, name, color_rgba')
         .eq('player_id', profile.id)
         .is('archived_at', null);
-      
       setDiscs(data || []);
     } catch (error) {
       console.error('Error fetching discs:', error);
     }
   };
 
-  const currentHole = holes[activeHoleIndex];
-
   const handleStartThrow = async () => {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'Location permission is required to track throws.');
+        Alert.alert('Permission Denied', 'Location permission is required.');
         return;
       }
-
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setPendingThrow({
         startLat: location.coords.latitude,
         startLng: location.coords.longitude,
       });
-      Alert.alert('Throw Started', 'GPS position recorded. Walk to your disc and tap "Mark End".');
+      Alert.alert('Measurement Started', 'Walk to your disc and tap the check icon.');
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to get location: ' + error.message);
+      Alert.alert('Error', error.message);
     }
   };
 
   const handleEndThrow = async () => {
     if (!pendingThrow) return;
-
     try {
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       setTempEndCoords({
@@ -250,30 +430,20 @@ export function ActiveMatchScreen() {
       });
       setIsDiscModalVisible(true);
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to get location: ' + error.message);
+      Alert.alert('Error', error.message);
     }
   };
 
   const finalizeThrow = async (discId: string | null) => {
     if (!pendingThrow || !tempEndCoords || !currentHole) return;
-
     try {
       const distance = calculateDistance(
-        pendingThrow.startLat,
-        pendingThrow.startLng,
-        tempEndCoords.lat,
-        tempEndCoords.lng
+        pendingThrow.startLat, pendingThrow.startLng,
+        tempEndCoords.lat, tempEndCoords.lng
       );
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('auth_id', user.id)
-        .single();
-
+      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_id', user.id).single();
       if (!profile) return;
 
       const { count } = await supabase
@@ -301,99 +471,38 @@ export function ActiveMatchScreen() {
         });
 
       if (error) throw error;
-
-      Alert.alert('Success', `Throw tracked: ${distance}m`);
       setPendingThrow(null);
       setTempEndCoords(null);
       setIsDiscModalVisible(false);
-      
       incrementScore(currentHole.id, profile.id, currentHole.par);
       fetchThrowsForHole();
-      
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
   };
 
-  const handleNextHole = () => {
-    if (activeHoleIndex < holes.length - 1) {
-      triggerSync();
-      setActiveHoleIndex(activeHoleIndex + 1);
-    }
-  };
-
-  const handlePrevHole = () => {
-    if (activeHoleIndex > 0) {
-      triggerSync();
-      setActiveHoleIndex(activeHoleIndex - 1);
-    }
-  };
-
-  const handleSkipHole = (playerId: string) => {
-    setScore(currentHole.id, playerId, null);
-  };
-
   const handleFinishMatch = async () => {
     try {
       setLoading(true);
-      
-      // 1. Force final sync
       await triggerSync();
-
-      // 2. Fetch all scores for this match to calculate totals
-      const { data: scoresData, error: scoresError } = await supabase
-        .from('scores')
-        .select(`
-          strokes,
-          player_id,
-          hole_id,
-          holes (
-            par
-          )
-        `)
-        .eq('match_id', matchId);
-
-      if (scoresError) throw scoresError;
-
-      // 3. Update total scores for each player
+      const { data: scoresData } = await supabase.from('scores').select('strokes, player_id').eq('match_id', matchId);
       const playerTotals = players.map(player => {
-        const playerScores = (scoresData || []).filter(s => s.player_id === player.id);
-        const totalScore = playerScores.reduce((acc, curr) => acc + (curr.strokes || 0), 0);
-        return {
-          player_id: player.id,
-          total_score: totalScore
-        };
+        const total = (scoresData || []).filter(s => s.player_id === player.id).reduce((acc, curr) => acc + (curr.strokes || 0), 0);
+        return { player_id: player.id, total_score: total };
       });
-
       for (const total of playerTotals) {
-        const { error: updateError } = await supabase
-          .from('match_players')
-          .update({ total_score: total.total_score })
-          .eq('match_id', matchId)
-          .eq('player_id', total.player_id);
-        
-        if (updateError) throw updateError;
+        await supabase.from('match_players').update({ total_score: total.total_score }).eq('match_id', matchId).eq('player_id', total.player_id);
       }
-
-      // 4. Mark match as completed
-      const { error: matchError } = await supabase
-        .from('matches')
-        .update({ status: 'completed' })
-        .eq('id', matchId);
-
-      if (matchError) throw matchError;
-
-      // 5. Navigate to Summary
+      await supabase.from('matches').update({ status: 'completed' }).eq('id', matchId);
       navigation.navigate('MatchSummary');
-
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to finish match: ' + error.message);
+      Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading || !currentHole) {
+  if (loading || (activeItem?.type === 'hole' && !currentHole)) {
     return (
       <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 100 }} />
@@ -404,125 +513,123 @@ export function ActiveMatchScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="close" size={28} color={COLORS.text} />
-        </TouchableOpacity>
-        <View style={styles.syncIndicator}>
-          {isSyncing && <ActivityIndicator size="small" color={COLORS.primary} />}
-          <Text style={styles.headerTitle}>Hole {currentHole.hole_number}</Text>
-        </View>
-        <TouchableOpacity onPress={() => triggerSync()}>
-          <Ionicons name="cloud-upload-outline" size={24} color={isSyncing ? COLORS.primary : COLORS.textSecondary} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.holeInfoBar}>
-        <View style={styles.holeStat}>
-          <Text style={styles.holeStatLabel}>PAR</Text>
-          <Text style={styles.holeStatValue}>{currentHole.par}</Text>
-        </View>
-        <View style={styles.holeStat}>
-          <Text style={styles.holeStatLabel}>DIST</Text>
-          <Text style={styles.holeStatValue}>{currentHole.distance_m}m</Text>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerHoleText}>
+            {activeItem?.type === 'hole' ? `Hole ${currentHole?.hole_number}` : activeItem?.title}
+          </Text>
+          {activeItem?.type === 'hole' && currentHole && (
+            <View style={styles.headerMeta}>
+              <Text style={styles.headerMetaText}>{currentHole.distance_m}m</Text>
+              <View style={styles.headerMetaDivider} />
+              <Text style={styles.headerMetaText}>PAR {currentHole.par}</Text>
+            </View>
+          )}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {players.map(player => {
-          const strokes = scores[currentHole.id]?.[player.id];
-          const isSkipped = strokes === null;
-          const scoreDiff = strokes ? strokes - currentHole.par : 0;
-          const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
+      {activeItem?.type === 'hole' && currentHole ? (
+        <>
+          <MapComponent hole={currentHole} />
 
-          return (
-            <View key={player.id} style={styles.playerCard}>
-              <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>{player.display_name}</Text>
-                {!isSkipped && strokes !== undefined && (
-                  <Text style={[
-                    styles.scoreDiff,
-                    scoreDiff < 0 && styles.scoreUnder,
-                    scoreDiff > 0 && styles.scoreOver
-                  ]}>
-                    {scoreDiffText}
-                  </Text>
-                )}
+          <View style={styles.scorecardContainer}>
+            <View style={styles.scorecardHeader}>
+              <Text style={styles.scorecardTitle}>Scorecard</Text>
+              <View style={styles.scorecardIcons}>
+                <TouchableOpacity 
+                  style={[styles.iconBtn, pendingThrow && { backgroundColor: COLORS.primary }]} 
+                  onPress={!pendingThrow ? handleStartThrow : handleEndThrow}
+                >
+                  <MaterialCommunityIcons 
+                    name={!pendingThrow ? "ruler" : "check"} 
+                    size={22} 
+                    color={pendingThrow ? COLORS.onPrimary : COLORS.textSecondary} 
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.iconBtn}
+                  onPress={() => Alert.alert('History', 'Throw history is being developed.')}
+                >
+                  <MaterialCommunityIcons name="history" size={22} color={COLORS.textSecondary} />
+                </TouchableOpacity>
               </View>
+            </View>
 
-              <View style={styles.scoreControl}>
-                {isSkipped ? (
-                  <TouchableOpacity 
-                    style={styles.skippedButton} 
-                    onPress={() => incrementScore(currentHole.id, player.id, currentHole.par)}
-                  >
-                    <Text style={styles.skippedText}>SKIPPED</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <>
-                    <TouchableOpacity 
-                      style={styles.scoreBtn}
-                      onLongPress={() => handleSkipHole(player.id)}
-                      onPress={() => decrementScore(currentHole.id, player.id, currentHole.par)}
-                    >
-                      <Ionicons name="remove" size={32} color={COLORS.text} />
-                    </TouchableOpacity>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              {players.map(player => {
+                const strokes = scores[currentHole.id]?.[player.id];
+                const scoreDiff = strokes ? strokes - currentHole.par : 0;
+                const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
 
-                    <View style={styles.scoreValueContainer}>
-                      <Text style={styles.scoreValue}>{strokes || '-'}</Text>
+                return (
+                  <View key={player.id} style={styles.playerRow}>
+                    <View style={styles.playerMain}>
+                      <View style={styles.playerAvatar}>
+                        <Text style={styles.avatarTextSmall}>{player.display_name[0]}</Text>
+                      </View>
+                      <View style={styles.playerNameContainer}>
+                        <Text style={styles.playerNameText}>{player.display_name}</Text>
+                        <Text style={[
+                          styles.playerScoreStatus,
+                          scoreDiff < 0 && styles.scoreUnder,
+                          scoreDiff > 0 && styles.scoreOver
+                        ]}>
+                          {scoreDiffText} ({strokes || 0})
+                        </Text>
+                      </View>
                     </View>
 
-                    <TouchableOpacity 
-                      style={[styles.scoreBtn, styles.scoreBtnPrimary]}
-                      onPress={() => incrementScore(currentHole.id, player.id, currentHole.par)}
-                    >
-                      <Ionicons name="add" size={32} color={COLORS.onPrimary} />
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
-          );
-        })}
-
-        {/* Throw Tracking Section */}
-        <View style={styles.throwSection}>
-          <Text style={styles.sectionTitle}>GPS THROW TRACKING</Text>
-          
-          {recordedThrows.length > 0 && (
-            <View style={styles.recordedThrowsList}>
-              {recordedThrows.map((t) => (
-                <View key={t.id} style={styles.recordedThrowItem}>
-                  <View style={styles.recordedThrowLeft}>
-                    <Text style={styles.throwNumberText}>#{t.throw_number}</Text>
-                    {t.discs && (
-                      <View style={styles.throwDiscInfo}>
-                        <View style={[styles.smallDiscColor, { backgroundColor: t.discs.color_rgba || COLORS.primary }]} />
-                        <Text style={styles.throwDiscName}>{t.discs.name}</Text>
+                    <View style={styles.scoreControls}>
+                      <TouchableOpacity 
+                        style={styles.controlBtn}
+                        onPress={() => decrementScore(currentHole.id, player.id, currentHole.par)}
+                      >
+                        <Ionicons name="remove" size={24} color={COLORS.text} />
+                      </TouchableOpacity>
+                      
+                      <View style={styles.currentScoreContainer}>
+                        <Text style={styles.currentScoreText}>{strokes || '-'}</Text>
                       </View>
-                    )}
+
+                      <TouchableOpacity 
+                        style={[styles.controlBtn, styles.controlBtnAdd]}
+                        onPress={() => incrementScore(currentHole.id, player.id, currentHole.par)}
+                      >
+                        <Ionicons name="add" size={24} color={COLORS.onPrimary} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <Text style={styles.throwDistance}>{t.distance_m}m</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {!pendingThrow ? (
-            <TouchableOpacity style={styles.trackButton} onPress={handleStartThrow}>
-              <MaterialCommunityIcons name="map-marker-distance" size={24} color={COLORS.onPrimary} />
-              <Text style={styles.trackButtonText}>MARK START</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.trackButton, styles.trackButtonEnd]} onPress={handleEndThrow}>
-              <MaterialCommunityIcons name="map-marker-check" size={24} color={COLORS.onPrimary} />
-              <Text style={styles.trackButtonText}>MARK END</Text>
-            </TouchableOpacity>
-          )}
+                );
+              })}
+            </ScrollView>
+          </View>
+        </>
+      ) : activeItem?.type === 'summary' ? (
+        <View style={styles.summaryContent}>
+          <SummaryView holes={holes.slice(activeItem.start, activeItem.end + 1)} players={players} scores={scores} />
         </View>
-      </ScrollView>
+      ) : null}
 
-      {/* Disc Modal */}
-      <Modal visible={isDiscModalVisible} transparent animationType="slide">
+      <View style={styles.holeNav}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.holeNavContent}>
+          {navItems.map((item, i) => (
+            <TouchableOpacity 
+              key={i} 
+              style={[styles.holeNavItem, i === activeNavItemIndex && styles.holeNavItemActive]}
+              onPress={() => {
+                triggerSync();
+                setActiveNavItemIndex(i);
+              }}
+            >
+              <Text style={[styles.holeNavText, i === activeNavItemIndex && styles.holeNavTextActive]}>
+                {item.type === 'hole' ? item.data.hole_number : item.title}
+              </Text>
+              {i === activeNavItemIndex && <View style={styles.activeHoleIndicator} />}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <Modal visible={isDiscModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Disc</Text>
@@ -530,17 +637,15 @@ export function ActiveMatchScreen() {
               data={discs}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.discItem} 
-                  onPress={() => finalizeThrow(item.id)}
-                >
+                <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(item.id)}>
                   <View style={[styles.discColor, { backgroundColor: item.color_rgba || COLORS.primary }]} />
                   <Text style={styles.discName}>{item.name}</Text>
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={
+              ListHeaderComponent={
                 <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(null)}>
-                  <Text style={styles.discName}>No discs in bag (Track without disc)</Text>
+                  <View style={[styles.discColor, { backgroundColor: '#555' }]} />
+                  <Text style={styles.discName}>Unknown Disc</Text>
                 </TouchableOpacity>
               }
             />
@@ -551,349 +656,73 @@ export function ActiveMatchScreen() {
         </View>
       </Modal>
 
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.navBtn, activeHoleIndex === 0 && styles.navBtnDisabled]} 
-          onPress={handlePrevHole}
-          disabled={activeHoleIndex === 0}
-        >
-          <Ionicons name="chevron-back" size={24} color={activeHoleIndex === 0 ? COLORS.textMuted : COLORS.text} />
+      <View style={styles.finishBar}>
+        <TouchableOpacity style={styles.finishMatchBtn} onPress={handleFinishMatch}>
+          <Text style={styles.finishMatchText}>FINISH ROUND</Text>
         </TouchableOpacity>
-
-        <View style={styles.holeDots}>
-          {holes.map((h, i) => (
-            <View 
-              key={h.id} 
-              style={[
-                styles.holeDot, 
-                i === activeHoleIndex && styles.holeDotActive,
-                i < activeHoleIndex && styles.holeDotDone
-              ]} 
-            />
-          ))}
-        </View>
-
-        {activeHoleIndex === holes.length - 1 ? (
-          <TouchableOpacity 
-            style={[styles.navBtn, styles.finishBtn]}
-            onPress={handleFinishMatch}
-          >
-            <Text style={styles.finishBtnText}>FINISH</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.navBtn} onPress={handleNextHole}>
-            <Ionicons name="chevron-forward" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  headerTitle: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-  syncIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  holeInfoBar: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    paddingVertical: 12,
-    marginHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-    marginBottom: 16,
-  },
-  holeStat: {
-    flex: 1,
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: COLORS.borderDark,
-  },
-  holeStatLabel: {
-    color: COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  holeStatValue: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 150,
-  },
-  playerCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-  },
-  playerInfo: {
-    flex: 1,
-  },
-  playerName: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  scoreDiff: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-  },
-  scoreUnder: {
-    color: COLORS.success,
-  },
-  scoreOver: {
-    color: '#FF5252',
-  },
-  scoreControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  scoreBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scoreBtnPrimary: {
-    backgroundColor: COLORS.primary,
-  },
-  scoreValueContainer: {
-    width: 40,
-    alignItems: 'center',
-  },
-  scoreValue: {
-    color: COLORS.text,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  skippedButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(160, 160, 160, 0.1)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-  },
-  skippedText: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  throwSection: {
-    marginTop: 24,
-    padding: 20,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 16,
-  },
-  recordedThrowsList: {
-    marginBottom: 16,
-  },
-  recordedThrowItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderDark,
-  },
-  recordedThrowLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  throwNumberText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.textSecondary,
-    width: 30,
-  },
-  throwDiscInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  smallDiscColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  throwDiscName: {
-    color: COLORS.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  throwDistance: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  trackButton: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  trackButtonEnd: {
-    backgroundColor: COLORS.success,
-  },
-  trackButtonText: {
-    color: COLORS.onPrimary,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 20,
-  },
-  discItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderDark,
-  },
-  discColor: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 16,
-  },
-  discName: {
-    fontSize: 18,
-    color: COLORS.text,
-  },
-  modalClose: {
-    marginTop: 20,
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalCloseText: {
-    color: COLORS.textSecondary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderDark,
-  },
-  navBtn: {
-    width: 50,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navBtnDisabled: {
-    opacity: 0.3,
-  },
-  finishBtn: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    width: 80,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  finishBtnText: {
-    color: COLORS.onPrimary,
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  holeDots: {
-    flexDirection: 'row',
-    gap: 6,
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    flexWrap: 'wrap',
-  },
-  holeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.borderDark,
-  },
-  holeDotActive: {
-    backgroundColor: COLORS.primary,
-    width: 12,
-    height: 6,
-  },
-  holeDotDone: {
-    backgroundColor: COLORS.textSecondary,
-  },
+  container: { flex: 1, backgroundColor: '#000' },
+  header: { paddingVertical: 12, alignItems: 'center' },
+  headerHoleText: { color: '#90CAF9', fontSize: 18, fontWeight: '500', marginBottom: 4 },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerMetaText: { color: '#90CAF9', fontSize: 16, opacity: 0.8 },
+  headerMetaDivider: { width: 1, height: 14, backgroundColor: 'rgba(144, 202, 249, 0.3)' },
+  mapContainer: { height: 200, backgroundColor: '#111', overflow: 'hidden' },
+  map: { flex: 1 },
+  scorecardContainer: { flex: 1, backgroundColor: '#151517', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 16, marginTop: -20 },
+  scorecardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16 },
+  scorecardTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
+  scorecardIcons: { flexDirection: 'row', gap: 8 },
+  iconBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
+  playerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+  playerMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  playerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(144, 202, 249, 0.15)', justifyContent: 'center', alignItems: 'center' },
+  playerNameContainer: { justifyContent: 'center' },
+  playerNameText: { color: '#FFF', fontSize: 15, fontWeight: '500' },
+  playerScoreStatus: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  scoreControls: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  controlBtn: { width: 34, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
+  controlBtnAdd: { backgroundColor: COLORS.primary },
+  currentScoreContainer: { width: 18, alignItems: 'center' },
+  currentScoreText: { color: '#FFF', fontSize: 17, fontWeight: '600' },
+  scoreUnder: { color: COLORS.success },
+  scoreOver: { color: '#FF5252' },
+  holeNav: { backgroundColor: '#151517', paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)' },
+  holeNavContent: { paddingHorizontal: 20, alignItems: 'center', gap: 20 },
+  holeNavItem: { paddingHorizontal: 4, alignItems: 'center', position: 'relative' },
+  holeNavText: { color: 'rgba(255,255,255,0.4)', fontSize: 15, fontWeight: '500' },
+  holeNavTextActive: { color: '#90CAF9', fontWeight: '700' },
+  activeHoleIndicator: { position: 'absolute', bottom: -6, width: '100%', height: 2, backgroundColor: '#90CAF9', borderRadius: 1 },
+  finishBar: { backgroundColor: '#151517', paddingHorizontal: 20, paddingBottom: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.04)' },
+  finishMatchBtn: { paddingVertical: 12, alignItems: 'center', backgroundColor: 'rgba(144, 202, 249, 0.1)', borderRadius: 12 },
+  finishMatchText: { color: COLORS.primary, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalTitle: { color: '#FFF', fontSize: 19, fontWeight: '600', marginBottom: 20 },
+  discItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  discColor: { width: 18, height: 18, borderRadius: 9, marginRight: 12 },
+  discName: { color: '#FFF', fontSize: 16 },
+  modalClose: { marginTop: 16, alignItems: 'center', paddingVertical: 12 },
+  modalCloseText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
+  avatarTextSmall: { color: '#90CAF9', fontSize: 13, fontWeight: '700' },
+  // Summary Styles
+  summaryContent: { flex: 1, backgroundColor: '#000' },
+  summaryContainer: { flex: 1, padding: 16 },
+  summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
+  summaryRow: { flexDirection: 'row', marginBottom: 2 },
+  summaryCell: { flex: 1, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
+  summaryCellSticky: { minWidth: 100, flex: 0, alignItems: 'flex-start', paddingHorizontal: 4, backgroundColor: 'transparent', marginRight: 8 },
+  summaryLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  summaryValue: { fontSize: 16, fontWeight: '800', fontFamily: 'JetBrains Mono' },
+  summaryHoleNum: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' },
+  summaryPar: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: '400' },
+  summaryPlayerName: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  // Map Toggle
+  mapToggle: { position: 'absolute', bottom: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
 });

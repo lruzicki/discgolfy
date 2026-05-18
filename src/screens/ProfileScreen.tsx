@@ -3,25 +3,15 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Ima
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
-import { useMatchStore } from '../store/useMatchStore';
 
 export function ProfileScreen({ route, navigation }: any) {
   const { name, email } = route.params || {};
   const displayName = name || 'Lucas';
-  const matchId = useMatchStore(state => state.matchId);
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
       Alert.alert('Error', error.message);
-    }
-  };
-
-  const handlePlayPress = () => {
-    if (matchId) {
-      navigation.navigate('ActiveMatch');
-    } else {
-      navigation.navigate('SelectCourse');
     }
   };
 
@@ -104,22 +94,6 @@ export function ProfileScreen({ route, navigation }: any) {
         </TouchableOpacity>
 
       </ScrollView>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={handlePlayPress}>
-          <Ionicons name="play-circle-outline" size={24} color={COLORS.textSecondary} />
-          <Text style={styles.navText}>PLAY</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="podium-outline" size={24} color={COLORS.textSecondary} />
-          <Text style={styles.navText}>LEADERBOARD</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person" size={24} color={COLORS.primary} />
-          <Text style={[styles.navText, { color: COLORS.primary }]}>PROFILE</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -270,25 +244,5 @@ const styles = StyleSheet.create({
     color: '#FF5252',
     fontSize: 16,
     fontWeight: '600',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: '#1C1C1E', // specific off-black for nav
-    paddingVertical: 12,
-    paddingBottom: 24,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-  },
-  navItem: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  navText: {
-    color: COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.5,
   },
 });
