@@ -74,7 +74,7 @@ export function ProfileScreen({ route, navigation }: any) {
             <Text style={styles.actionText}>BAG</Text>
             <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} style={styles.actionArrow} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('MatchHistory')}>
             <MaterialCommunityIcons name="history" size={20} color={COLORS.textSecondary} />
             <Text style={styles.actionText}>HISTORY</Text>
             <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} style={styles.actionArrow} />
