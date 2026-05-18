@@ -19,10 +19,9 @@ export function LoginScreen({ navigation }: any) {
       return;
     }
 
-    // Navigation is handled by App.tsx session listener, 
-    // but for tests or explicit navigation:
+    // Navigation is handled by App.tsx session listener
     if (data?.user) {
-      navigation.replace('Profile', { email: data.user.email });
+      // No explicit navigation needed; App.tsx switches the stack
     }
   };
 

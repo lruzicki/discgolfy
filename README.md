@@ -49,8 +49,8 @@ To test the application properly, you should run it on an Android Emulator.
 1. Open Android Studio and start your configured Android Virtual Device (AVD).
 2. Start the Expo development server, clearing the cache and forcing it to connect to the Android emulator over your local network:
    ```bash
-   npx expo start -c --android --host lan
-   ```
+ npx expo run:android
+ ```
 
 ### 5. Creating a Test User
 
