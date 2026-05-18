@@ -44,13 +44,28 @@ This project uses Supabase for the backend. We use the local Supabase CLI for de
 
 ### 4. Running the App
 
-To test the application properly, you should run it on an Android Emulator.
-
-1. Open Android Studio and start your configured Android Virtual Device (AVD).
-2. Start the Expo development server, clearing the cache and forcing it to connect to the Android emulator over your local network:
+#### Standard Environment (Linux/macOS)
+1. Open your Android Emulator.
+2. Run:
    ```bash
- npx expo run:android
- ```
+   npx expo run:android
+   ```
+
+#### WSL + Windows Emulator (Special Setup)
+If you are using **WSL** for development and your **Android Emulator** is running on **Windows**, you cannot use `expo run:android` directly because WSL doesn't have the Android SDK/ADB connected to the host by default.
+
+Follow these steps:
+1. **Get WSL IP:** In your WSL terminal, run `hostname -I` and copy the first IP address (e.g., `172.21.183.255`).
+2. **Update .env:** Ensure `EXPO_PUBLIC_SUPABASE_URL` uses this IP instead of `127.0.0.1`.
+3. **Start Expo:** Run the packager by explicitly providing your WSL IP:
+   ```bash
+   REACT_NATIVE_PACKAGER_HOSTNAME=<YOUR_WSL_IP> npm start
+   ```
+4. **Open App:** Launch the "Expo Go" or your "Development Build" app manually on the Pixel emulator. It will connect to the Metro server running on your WSL IP.
+
+**Why this way?** 
+- `npm start` only runs the JavaScript bundler (Metro), which the emulator can reach via IP.
+- `npx expo run:android` tries to compile native code and use ADB, which fails in WSL unless you have a complex bridge setup.
 
 ### 5. Creating a Test User
 
