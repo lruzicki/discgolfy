@@ -288,6 +288,12 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 14,
   },
+  unitText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
   actionGrid: {
     flexDirection: 'row',
     gap: 12,
@@ -336,6 +342,72 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 82, 82, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 82, 82, 0.2)',
+  },
+  logoutText: {
+    color: '#FF5252',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+onButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+  },
+  actionText: {
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginLeft: 8,
+    flex: 1,
+  },
+  actionArrow: {
+    marginLeft: 'auto',
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  chartPlaceholder: {
+    height: 150,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 32,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 82, 82, 0.2)',
+  },
+  logoutText: {
+    color: '#FF5252',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});
+ 82, 0.2)',
   },
   logoutText: {
     color: '#FF5252',

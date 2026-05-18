@@ -1,3 +1,5 @@
+Status: Completed
+
 ## Parent
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 
@@ -11,9 +13,9 @@ Statistics to calculate:
 - **Total Throws**: Aggregated count of strokes from the `scores` table.
 
 ## Acceptance criteria
-- [ ] Profile stats are no longer hardcoded.
-- [ ] Stats update correctly after a match is finished.
-- [ ] Efficient Supabase queries are used to perform these aggregations.
+- [x] Profile stats are no longer hardcoded.
+- [x] Stats update correctly after a match is finished.
+- [x] Efficient Supabase queries are used to perform these aggregations.
 
 ## Blocked by
 - [010-tab-navigation-architecture.md](./010-tab-navigation-architecture.md)

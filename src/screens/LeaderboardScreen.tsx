@@ -29,19 +29,76 @@ interface MatchEntry {
   }[];
 }
 
+interface ThrowEntry {
+  id: string;
+  distance_m: number;
+  display_name: string;
+  disc_name: string;
+  course_name: string;
+  date: string;
+}
+
+type Tab = 'rounds' | 'throws' | 'players';
+
 export function LeaderboardScreen() {
   const navigation = useNavigation<any>();
+  const [activeTab, setActiveTab] = useState<Tab>('rounds');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [matches, setMatches] = useState<MatchEntry[]>([]);
+  const [topThrows, setTopThrows] = useState<ThrowEntry[]>([]);
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, []);
+    fetchData();
+  }, [activeTab]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    if (activeTab === 'rounds') await fetchLeaderboard();
+    else if (activeTab === 'throws') await fetchTopThrows();
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  const fetchTopThrows = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('throws')
+        .select(`
+          id,
+          distance_m,
+          created_at,
+          profiles:player_id ( display_name ),
+          discs:disc_id ( name ),
+          matches (
+            layouts (
+              courses ( name )
+            )
+          )
+        `)
+        .not('distance_m', 'is', null)
+        .order('distance_m', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const formatted: ThrowEntry[] = (data || []).map((t: any) => ({
+        id: t.id,
+        distance_m: t.distance_m,
+        display_name: t.profiles?.display_name || 'Unknown',
+        disc_name: t.discs?.name || 'Unknown Disc',
+        course_name: t.matches?.layouts?.courses?.name || 'Unknown Course',
+        date: t.created_at
+      }));
+
+      setTopThrows(formatted);
+    } catch (error: any) {
+      console.error('Error fetching throws:', error);
+    }
+  };
 
   const fetchLeaderboard = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('matches')
         .select(`
@@ -84,15 +141,12 @@ export function LeaderboardScreen() {
     } catch (error: any) {
       console.error('Error fetching leaderboard:', error);
       Alert.alert('Error', 'Failed to load global board.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
   };
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchLeaderboard();
+    fetchData();
   };
 
   const renderMatch = ({ item }: { item: MatchEntry }) => (
@@ -135,11 +189,40 @@ export function LeaderboardScreen() {
     </View>
   );
 
+  const renderThrow = ({ item, index }: { item: ThrowEntry, index: number }) => (
+    <View style={styles.throwCard}>
+      <View style={[styles.rankBadge, index === 0 && styles.rankGold, index === 1 && styles.rankSilver, index === 2 && styles.rankBronze]}>
+        <Text style={styles.rankText}>{index + 1}</Text>
+      </View>
+      <View style={styles.throwInfo}>
+        <Text style={styles.throwPlayer}>{item.display_name}</Text>
+        <Text style={styles.throwSubtext}>{item.disc_name} • {item.course_name}</Text>
+      </View>
+      <View style={styles.throwValue}>
+        <Text style={styles.distanceValue}>{item.distance_m}</Text>
+        <Text style={styles.unitText}>m</Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Global Board</Text>
-        <Text style={styles.subTitle}>Recently completed matches</Text>
+        <Text style={styles.title}>Leaderboard</Text>
+        <View style={styles.tabBar}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'rounds' && styles.activeTab]} 
+            onPress={() => setActiveTab('rounds')}
+          >
+            <Text style={[styles.tabText, activeTab === 'rounds' && styles.activeTabText]}>Rounds</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'throws' && styles.activeTab]} 
+            onPress={() => setActiveTab('throws')}
+          >
+            <Text style={[styles.tabText, activeTab === 'throws' && styles.activeTabText]}>Top Throws</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading && !refreshing ? (
@@ -148,17 +231,20 @@ export function LeaderboardScreen() {
         </View>
       ) : (
         <FlatList
-          data={matches}
+          data={activeTab === 'rounds' ? matches : topThrows}
           keyExtractor={(item) => item.id}
-          renderItem={renderMatch}
+          renderItem={activeTab === 'rounds' ? renderMatch : renderThrow as any}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={onRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons name="trophy-outline" size={64} color={COLORS.borderDark} />
-              <Text style={styles.emptyText}>No completed matches yet.</Text>
-              <Text style={styles.emptySubtext}>Be the first to finish a round!</Text>
+              <MaterialCommunityIcons 
+                name={activeTab === 'rounds' ? "trophy-outline" : "arrow-up-right-bold"} 
+                size={64} 
+                color={COLORS.borderDark} 
+              />
+              <Text style={styles.emptyText}>No data available yet.</Text>
             </View>
           }
         />
@@ -175,19 +261,39 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   title: {
     fontSize: 32,
     fontWeight: '800',
     color: COLORS.text,
     letterSpacing: -0.5,
+    marginBottom: 16,
   },
-  subTitle: {
-    fontSize: 14,
+  tabBar: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  activeTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tabText: {
     color: COLORS.textSecondary,
-    marginTop: 4,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  activeTabText: {
+    color: COLORS.onPrimary,
   },
   listContent: {
     padding: 16,
@@ -282,6 +388,62 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  throwCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.borderDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  rankGold: { backgroundColor: '#FFD700' },
+  rankSilver: { backgroundColor: '#C0C0C0' },
+  rankBronze: { backgroundColor: '#CD7F32' },
+  rankText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  throwInfo: {
+    flex: 1,
+  },
+  throwPlayer: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  throwSubtext: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  throwValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  distanceValue: {
+    color: COLORS.primary,
+    fontSize: 24,
+    fontWeight: '800',
+    fontFamily: 'JetBrains Mono',
+  },
+  unitText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -297,12 +459,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
     marginTop: 20,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    marginTop: 8,
     textAlign: 'center',
   },
 });
