@@ -14,7 +14,9 @@ export function ProfileScreen({ route, navigation }: any) {
     avgScore: 0,
     bestHole: 'N/A',
     bestHoleInfo: '',
-    totalThrows: 0
+    totalThrows: 0,
+    longestThrow: 0,
+    bestRound: 'N/A'
   });
 
   useEffect(() => {
@@ -41,7 +43,43 @@ export function ProfileScreen({ route, navigation }: any) {
         .select('*', { count: 'exact', head: true })
         .eq('player_id', profile.id);
 
-      // 2. Fetch All Scores for calculations
+      // 2. Fetch Longest Throw
+      const { data: throwData } = await supabase
+        .from('throws')
+        .select('distance_m')
+        .eq('player_id', profile.id)
+        .order('distance_m', { ascending: false })
+        .limit(1);
+      
+      const longestThrow = throwData?.[0]?.distance_m || 0;
+
+      // 3. Fetch Best Round (lowest score relative to par)
+      const { data: bestRoundData } = await supabase
+        .from('match_players')
+        .select(`
+          total_score,
+          matches (
+            layouts (
+              hole_count,
+              holes ( par )
+            )
+          )
+        `)
+        .eq('player_id', profile.id)
+        .not('total_score', 'is', null);
+
+      let bestRoundDiff = Infinity;
+      if (bestRoundData && bestRoundData.length > 0) {
+        bestRoundData.forEach((r: any) => {
+          const totalPar = r.matches?.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
+          if (totalPar > 0) {
+            const diff = (r.total_score || 0) - totalPar;
+            if (diff < bestRoundDiff) bestRoundDiff = diff;
+          }
+        });
+      }
+
+      // 4. Fetch All Scores for calculations
       const { data: scoresData } = await supabase
         .from('scores')
         .select(`
@@ -53,7 +91,7 @@ export function ProfileScreen({ route, navigation }: any) {
 
       let totalStrokes = 0;
       let totalPar = 0;
-      let bestDiff = Infinity;
+      let bestHoleDiff = Infinity;
       let bestHoleStr = 'N/A';
       let bestHoleDetails = '';
 
@@ -63,8 +101,8 @@ export function ProfileScreen({ route, navigation }: any) {
           totalPar += s.holes.par;
           const diff = s.strokes - s.holes.par;
           
-          if (diff < bestDiff) {
-            bestDiff = diff;
+          if (diff < bestHoleDiff) {
+            bestHoleDiff = diff;
             if (diff <= -3) bestHoleStr = 'Albatross+';
             else if (diff === -2) bestHoleStr = 'Eagle';
             else if (diff === -1) bestHoleStr = 'Birdie';
@@ -81,7 +119,9 @@ export function ProfileScreen({ route, navigation }: any) {
         avgScore: scoresData && scoresData.length > 0 ? (totalStrokes - totalPar) / (roundsCount || 1) : 0,
         bestHole: bestHoleStr,
         bestHoleInfo: bestHoleDetails,
-        totalThrows: totalStrokes
+        totalThrows: totalStrokes,
+        longestThrow,
+        bestRound: bestRoundDiff === Infinity ? 'N/A' : (bestRoundDiff === 0 ? 'E' : (bestRoundDiff > 0 ? `+${bestRoundDiff}` : bestRoundDiff))
       });
 
     } catch (error) {
@@ -127,7 +167,7 @@ export function ProfileScreen({ route, navigation }: any) {
           <View style={styles.statCardHalf}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="history" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.statLabel}>ROUNDS PLAYED</Text>
+              <Text style={styles.statLabel}>ROUNDS</Text>
             </View>
             <Text style={styles.statValue}>{stats.roundsPlayed}</Text>
           </View>
@@ -142,6 +182,32 @@ export function ProfileScreen({ route, navigation }: any) {
               stats.avgScore > 0 && { color: '#FF5252' }
             ]}>
               {stats.avgScore === 0 ? 'E' : (stats.avgScore > 0 ? `+${stats.avgScore.toFixed(1)}` : stats.avgScore.toFixed(1))}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="arrow-up-right-bold" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.statLabel}>LONGEST DRIVE</Text>
+            </View>
+            <View style={styles.bestHoleRow}>
+              <Text style={styles.statValue}>{stats.longestThrow}</Text>
+              <Text style={styles.unitText}>m</Text>
+            </View>
+          </View>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <Ionicons name="medal-outline" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.statLabel}>BEST ROUND</Text>
+            </View>
+            <Text style={[
+              styles.statValue,
+              stats.bestRound !== 'N/A' && !stats.bestRound.toString().startsWith('+') && stats.bestRound !== 'E' && { color: COLORS.success },
+              stats.bestRound.toString().startsWith('+') && { color: '#FF5252' }
+            ]}>
+              {stats.bestRound}
             </Text>
           </View>
         </View>
@@ -342,72 +408,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 82, 82, 0.1)',
     borderWidth: 1,
     borderColor: 'rgba(255, 82, 82, 0.2)',
-  },
-  logoutText: {
-    color: '#FF5252',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
-onButton: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-  },
-  actionText: {
-    color: COLORS.text,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    marginLeft: 8,
-    flex: 1,
-  },
-  actionArrow: {
-    marginLeft: 'auto',
-  },
-  sectionTitle: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  chartPlaceholder: {
-    height: 150,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 32,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 82, 82, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 82, 82, 0.2)',
-  },
-  logoutText: {
-    color: '#FF5252',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  centered: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
- 82, 0.2)',
   },
   logoutText: {
     color: '#FF5252',

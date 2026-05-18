@@ -1,5 +1,7 @@
 Status: Completed
 
+Status: Completed
+
 ## Parent
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 

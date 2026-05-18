@@ -191,7 +191,12 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
   );
 };
 
-const MapComponent = ({ hole, isRecording }: { hole: Hole | null, isRecording: boolean }) => {
+const MapComponent = ({ hole, isRecording, playerPos, throwStart }: { 
+  hole: Hole | null, 
+  isRecording: boolean,
+  playerPos: { lat: number, lng: number } | null,
+  throwStart: { lat: number, lng: number } | null
+}) => {
   const [isSatellite, setIsSatellite] = useState(true);
 
   if (!hole) return null;
@@ -242,6 +247,14 @@ const MapComponent = ({ hole, isRecording }: { hole: Hole | null, isRecording: b
             50% { opacity: 0.5; transform: scale(0.8); }
             100% { opacity: 1; transform: scale(1); }
           }
+          .player-marker {
+            width: 14px;
+            height: 14px;
+            background: #2196F3;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+          }
         </style>
       </head>
       <body>
@@ -285,13 +298,36 @@ const MapComponent = ({ hole, isRecording }: { hole: Hole | null, isRecording: b
           L.marker(tee, {icon: teeIcon}).addTo(map);
           L.marker(basket, {icon: basketIcon}).addTo(map);
 
-          const line = L.polyline([tee, basket], {
+          // Hole line
+          const holeLine = L.polyline([tee, basket], {
             color: '${isSatellite ? '#FFF' : COLORS.primary}',
-            weight: 3,
-            dashArray: '5, 10'
+            weight: 2,
+            dashArray: '5, 10',
+            opacity: 0.5
           }).addTo(map);
 
-          map.fitBounds(line.getBounds(), { padding: [40, 40] });
+          // Player Marker
+          let playerMarker;
+          if (${!!playerPos}) {
+            const playerIcon = L.divIcon({
+              className: 'player-marker'
+            });
+            playerMarker = L.marker([${playerPos?.lat || 0}, ${playerPos?.lng || 0}], {icon: playerIcon}).addTo(map);
+          }
+
+          // Throw Line
+          if (${!!throwStart && !!playerPos}) {
+            L.polyline([[${throwStart?.lat || 0}, ${throwStart?.lng || 0}], [${playerPos?.lat || 0}, ${playerPos?.lng || 0}]], {
+              color: '#FF5252',
+              weight: 4,
+              dashArray: '1, 6'
+            }).addTo(map);
+          }
+
+          const bounds = L.latLngBounds([tee, basket]);
+          if (${!!playerPos}) bounds.extend([${playerPos?.lat || 0}, ${playerPos?.lng || 0}]);
+          
+          map.fitBounds(bounds, { padding: [40, 40] });
         </script>
       </body>
     </html>
@@ -347,6 +383,37 @@ export function ActiveMatchScreen() {
   const [recordedThrows, setRecordedThrows] = useState<ThrowRecord[]>([]);
   const [activeNavItemIndex, setActiveNavItemIndex] = useState(0);
   const [isThrowHistoryVisible, setIsThrowHistoryVisible] = useState(false);
+  const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
+
+  useEffect(() => {
+    let locationWatcher: any;
+
+    const startLocationTracking = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      locationWatcher = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          distanceInterval: 1,
+        },
+        (location) => {
+          setPlayerPos({
+            lat: location.coords.latitude,
+            lng: location.coords.longitude,
+          });
+        }
+      );
+    };
+
+    startLocationTracking();
+
+    return () => {
+      if (locationWatcher) {
+        locationWatcher.remove();
+      }
+    };
+  }, []);
 
   const navItems: any[] = [];
   holes.forEach((hole, idx) => {
@@ -620,7 +687,12 @@ export function ActiveMatchScreen() {
 
       {activeItem?.type === 'hole' && currentHole ? (
         <>
-          <MapComponent hole={currentHole} isRecording={!!pendingThrow} />
+          <MapComponent 
+            hole={currentHole} 
+            isRecording={!!pendingThrow} 
+            playerPos={playerPos}
+            throwStart={pendingThrow ? { lat: pendingThrow.startLat, lng: pendingThrow.startLng } : null}
+          />
 
           <View style={styles.scorecardContainer}>
             <View style={styles.scorecardHeader}>

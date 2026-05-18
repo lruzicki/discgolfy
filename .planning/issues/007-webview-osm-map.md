@@ -1,3 +1,5 @@
+Status: Completed
+
 ## What to build
 Replace the native `react-native-maps` implementation with a `react-native-webview` based Leaflet.js map. This ensures a 100% free solution without requiring Google Maps API keys or native binary rebuilds.
 
