@@ -29,6 +29,7 @@ export function MatchSummaryScreen() {
   const [loading, setLoading] = useState(true);
   const [playerScores, setPlayerScores] = useState<PlayerScore[]>([]);
   const [courseInfo, setCourseInfo] = useState<any>(null);
+  const [isCreator, setIsCreator] = useState(false);
 
   useEffect(() => {
     fetchSummaryData();
@@ -37,6 +38,14 @@ export function MatchSummaryScreen() {
   const fetchSummaryData = async () => {
     try {
       setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
       
       // 1. Fetch Match, Layout and Course info
       const { data: matchData, error: matchError } = await supabase
@@ -44,6 +53,7 @@ export function MatchSummaryScreen() {
         .select(`
           id,
           date_played,
+          created_by,
           layouts (
             name,
             hole_count,
@@ -58,6 +68,7 @@ export function MatchSummaryScreen() {
 
       if (matchError) throw matchError;
       setCourseInfo(matchData);
+      setIsCreator(profile?.id === matchData.created_by);
 
       // 2. Fetch all scores for this match
       const { data: scoresData, error: scoresError } = await supabase
@@ -112,24 +123,60 @@ export function MatchSummaryScreen() {
 
   const handleDone = () => {
     resetMatch();
-    navigation.navigate('Profile', { screen: 'ProfileHome' });
+    // Navigate to Play tab instead of Profile to make starting a new match easier
+    navigation.navigate('Play', { screen: 'PlayHome' });
+  };
+
+  const handleStartNew = () => {
+    resetMatch();
+    navigation.navigate('Play', { screen: 'SelectCourse' });
+  };
+
+  const handleDelete = async () => {
+    Alert.alert(
+      'Delete Match',
+      'Are you sure you want to permanently delete this match and all its data? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('matches')
+                .delete()
+                .eq('id', matchId);
+              
+              if (error) throw error;
+              
+              resetMatch();
+              navigation.navigate('Profile', { screen: 'ProfileHome' });
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete match');
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 100 }} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.title}>Match Summary</Text>
+          <MaterialCommunityIcons name="trophy-variant" size={60} color={COLORS.primary} style={{ marginBottom: 12 }} />
+          <Text style={styles.title}>Final Results</Text>
           <Text style={styles.date}>
-            {new Date(courseInfo?.date_played).toLocaleDateString()}
+            {new Date(courseInfo?.date_played).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </Text>
         </View>
 
@@ -138,34 +185,69 @@ export function MatchSummaryScreen() {
           <Text style={styles.layoutName}>{courseInfo?.layouts?.name} • {courseInfo?.layouts?.hole_count} Holes</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>LEADERBOARD</Text>
+        <Text style={styles.sectionTitle}>FINAL LEADERBOARD</Text>
         {playerScores.map((player, index) => {
           const scoreDiff = player.total_strokes - player.total_par;
           const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
           
           return (
-            <View key={player.id} style={styles.playerRow}>
-              <View style={styles.rankContainer}>
-                <Text style={styles.rankText}>{index + 1}</Text>
+            <View key={player.id} style={[styles.playerRow, index === 0 && styles.winnerRow]}>
+              <View style={[styles.rankContainer, index === 0 && styles.winnerRank]}>
+                {index === 0 ? (
+                  <MaterialCommunityIcons name="crown" size={14} color="#000" />
+                ) : (
+                  <Text style={styles.rankText}>{index + 1}</Text>
+                )}
               </View>
               <Text style={styles.playerName}>{player.display_name}</Text>
               <View style={styles.scoreContainer}>
                 <Text style={styles.totalStrokes}>{player.total_strokes}</Text>
-                <Text style={[
-                  styles.scoreDiff,
-                  scoreDiff < 0 && styles.scoreUnder,
-                  scoreDiff > 0 && styles.scoreOver
+                <View style={[
+                  styles.diffBadge,
+                  scoreDiff < 0 && styles.scoreUnderBg,
+                  scoreDiff > 0 && styles.scoreOverBg,
+                  scoreDiff === 0 && styles.scoreEvenBg
                 ]}>
-                  ({scoreDiffText})
-                </Text>
+                  <Text style={[
+                    styles.diffText,
+                    scoreDiff < 0 && styles.scoreUnderText,
+                    scoreDiff > 0 && styles.scoreOverText,
+                    scoreDiff === 0 && styles.scoreEvenText
+                  ]}>
+                    {scoreDiffText}
+                  </Text>
+                </View>
               </View>
             </View>
           );
         })}
 
-        <TouchableOpacity style={styles.doneBtn} onPress={handleDone}>
-          <Text style={styles.doneBtnText}>BACK TO PROFILE</Text>
-        </TouchableOpacity>
+        <View style={styles.actionSection}>
+          {!isViewingHistorical ? (
+            <>
+              <TouchableOpacity style={styles.doneBtn} onPress={handleStartNew}>
+                <Ionicons name="play-skip-forward" size={20} color={COLORS.onPrimary} style={{ marginRight: 8 }} />
+                <Text style={styles.doneBtnText}>PLAY AGAIN</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.secondaryBtn} onPress={handleDone}>
+                <Text style={styles.secondaryBtnText}>BACK TO HUB</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={20} color={COLORS.text} style={{ marginRight: 8 }} />
+              <Text style={styles.secondaryBtnText}>BACK TO FEED</Text>
+            </TouchableOpacity>
+          )}
+
+          {isCreator && (
+            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={16} color="#FF5252" />
+              <Text style={styles.deleteBtnText}>DELETE MATCH</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -223,61 +305,115 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.surface,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: COLORS.borderDark,
   },
+  winnerRow: {
+    borderColor: COLORS.primary,
+    backgroundColor: 'rgba(144, 202, 249, 0.05)',
+    borderWidth: 1.5,
+  },
   rankContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: COLORS.borderDark,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
+  winnerRank: {
+    backgroundColor: COLORS.primary,
+  },
   rankText: {
     color: COLORS.textSecondary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   playerName: {
     flex: 1,
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: COLORS.text,
   },
   scoreContainer: {
     alignItems: 'flex-end',
+    gap: 4,
   },
   totalStrokes: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: COLORS.text,
+    fontFamily: 'JetBrains Mono',
   },
-  scoreDiff: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
+  diffBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    minWidth: 36,
+    alignItems: 'center',
   },
-  scoreUnder: {
-    color: COLORS.success,
+  diffText: {
+    fontSize: 11,
+    fontWeight: '900',
   },
-  scoreOver: {
-    color: '#FF5252',
+  scoreUnderBg: { backgroundColor: 'rgba(57, 255, 20, 0.15)' },
+  scoreUnderText: { color: COLORS.success },
+  scoreOverBg: { backgroundColor: 'rgba(255, 82, 82, 0.15)' },
+  scoreOverText: { color: '#FF5252' },
+  scoreEvenBg: { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
+  scoreEvenText: { color: COLORS.textSecondary },
+  actionSection: {
+    marginTop: 32,
+    gap: 12,
   },
   doneBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 18,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    marginTop: 40,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   doneBtnText: {
     color: COLORS.onPrimary,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 1,
+  },
+  secondaryBtn: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  secondaryBtnText: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    padding: 12,
+    gap: 6,
+  },
+  deleteBtnText: {
+    color: '#FF5252',
+    fontSize: 13,
+    fontWeight: '700',
+    opacity: 0.8,
   },
 });

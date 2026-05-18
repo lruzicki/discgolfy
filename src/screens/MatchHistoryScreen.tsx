@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -57,6 +57,7 @@ export function MatchHistoryScreen() {
           matches (
             id,
             date_played,
+            created_by,
             layouts (
               name,
               courses ( name ),
@@ -94,13 +95,39 @@ export function MatchHistoryScreen() {
     }
   };
 
+  const handleDeleteMatch = async (matchId: string) => {
+    Alert.alert(
+      'Delete Match',
+      'Are you sure you want to permanently delete this match and all its data? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('matches')
+                .delete()
+                .eq('id', matchId);
+              
+              if (error) throw error;
+              
+              setMatches(prev => prev.filter(m => m.id !== matchId));
+            } catch (error: any) {
+              Alert.alert('Error', error.message || 'Failed to delete match');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderEntry = ({ item }: { item: HistoryEntry }) => (
     <TouchableOpacity 
       style={styles.card}
       onPress={() => {
-        // Note: MatchSummaryScreen uses matchId from store
-        setMatchId(item.id);
-        navigation.navigate('MatchSummary');
+        navigation.navigate('MatchSummary', { matchId: item.id });
       }}
     >
       <View style={styles.cardHeader}>
@@ -125,12 +152,18 @@ export function MatchHistoryScreen() {
             {item.diff === 0 ? 'E' : (item.diff > 0 ? `+${item.diff}` : item.diff)}
           </Text>
         </View>
+        <TouchableOpacity 
+          style={styles.deleteBtn} 
+          onPress={() => handleDeleteMatch(item.id)}
+        >
+          <Ionicons name="trash-outline" size={20} color="#FF5252" />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
@@ -253,6 +286,10 @@ const styles = StyleSheet.create({
   },
   scoreOver: {
     color: '#FF5252',
+  },
+  deleteBtn: {
+    padding: 8,
+    marginLeft: 8,
   },
   emptyContainer: {
     marginTop: 100,

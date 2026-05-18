@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { COLORS } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +27,14 @@ interface DiscForm {
   max_putt_m: string;
 }
 
+const PRESET_COLORS = [
+  '#FF5252', '#FF4081', '#E040FB', '#7C4DFF', 
+  '#536DFE', '#448AFF', '#40C4FF', '#18FFFF', 
+  '#64FFDA', '#69F0AE', '#B2FF59', '#EEFF41', 
+  '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40',
+  '#FFFFFF', '#A0A0A0', '#424242', '#000000'
+];
+
 export function AddEditDiscScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -35,7 +43,7 @@ export function AddEditDiscScreen() {
 
   const [form, setForm] = useState<DiscForm>({
     name: disc?.name || '',
-    color_rgba: disc?.color_rgba || COLORS.primary,
+    color_rgba: disc?.color_rgba || '#FF5252',
     speed: disc?.speed?.toString() || '0',
     glide: disc?.glide?.toString() || '0',
     turn: disc?.turn?.toString() || '0',
@@ -129,8 +137,8 @@ export function AddEditDiscScreen() {
     );
   };
 
-  const InputField = ({ label, value, onChangeText, keyboardType = 'default', placeholder }: any) => (
-    <View style={styles.inputContainer}>
+  const InputField = ({ label, value, onChangeText, keyboardType = 'default', placeholder, containerStyle }: any) => (
+    <View style={[styles.inputContainer, containerStyle]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={styles.input}
@@ -144,13 +152,13 @@ export function AddEditDiscScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="close" size={28} color={COLORS.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{isEditing ? 'Edit Disc' : 'Add Disc'}</Text>
-        <TouchableOpacity onPress={handleSave} disabled={saving}>
+        <TouchableOpacity onPress={handleSave} disabled={saving} style={styles.headerBtn}>
           {saving ? (
             <ActivityIndicator color={COLORS.primary} />
           ) : (
@@ -159,7 +167,7 @@ export function AddEditDiscScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <InputField
           label="Disc Name"
           value={form.name}
@@ -167,18 +175,38 @@ export function AddEditDiscScreen() {
           placeholder="e.g. Destroyer"
         />
 
+        <Text style={styles.label}>Disc Color</Text>
+        <View style={styles.colorPickerContainer}>
+          <View style={[styles.selectedColorPreview, { backgroundColor: form.color_rgba }]} />
+          <View style={styles.presetsGrid}>
+            {PRESET_COLORS.map((color) => (
+              <TouchableOpacity
+                key={color}
+                style={[
+                  styles.colorPreset,
+                  { backgroundColor: color },
+                  form.color_rgba === color && styles.colorPresetSelected
+                ]}
+                onPress={() => setForm({ ...form, color_rgba: color })}
+              />
+            ))}
+          </View>
+        </View>
+
         <View style={styles.row}>
           <InputField
             label="Speed"
             value={form.speed}
             onChangeText={(text: string) => setForm({ ...form, speed: text })}
             keyboardType="numeric"
+            containerStyle={{ flex: 1 }}
           />
           <InputField
             label="Glide"
             value={form.glide}
             onChangeText={(text: string) => setForm({ ...form, glide: text })}
             keyboardType="numeric"
+            containerStyle={{ flex: 1 }}
           />
         </View>
 
@@ -188,12 +216,14 @@ export function AddEditDiscScreen() {
             value={form.turn}
             onChangeText={(text: string) => setForm({ ...form, turn: text })}
             keyboardType="numeric"
+            containerStyle={{ flex: 1 }}
           />
           <InputField
             label="Fade"
             value={form.fade}
             onChangeText={(text: string) => setForm({ ...form, fade: text })}
             keyboardType="numeric"
+            containerStyle={{ flex: 1 }}
           />
         </View>
 
@@ -239,31 +269,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderDark,
   },
+  headerBtn: {
+    width: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: COLORS.text,
   },
   saveText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.primary,
   },
   scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   inputContainer: {
     marginBottom: 20,
-    flex: 1,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: '600',
     color: COLORS.textSecondary,
     marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   input: {
     backgroundColor: COLORS.surface,
@@ -273,6 +312,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: COLORS.borderDark,
+  },
+  colorPickerContainer: {
+    marginBottom: 24,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  selectedColorPreview: {
+    height: 48,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  presetsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  colorPreset: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  colorPresetSelected: {
+    borderColor: COLORS.text,
+    borderWidth: 2,
+    transform: [{ scale: 1.1 }],
   },
   row: {
     flexDirection: 'row',

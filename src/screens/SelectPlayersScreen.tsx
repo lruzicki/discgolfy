@@ -312,7 +312,7 @@ export function SelectPlayersScreen() {
   const displayList = loading ? [] : (currentUserProfile ? [currentUserProfile, ...friends, ...guests] : [...friends, ...guests]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={28} color={COLORS.text} />

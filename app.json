@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "temp-app",
-    "slug": "temp-app",
+    "name": "DiscGolfy",
+    "slug": "discgolfy",
     "version": "1.0.0",
     "scheme": "discgolfy",
     "orientation": "portrait",

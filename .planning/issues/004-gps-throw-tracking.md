@@ -1,3 +1,5 @@
+Status: Completed
+
 ## What to build
 Integrate GPS-based throw tracking into the active match scorecard.
 

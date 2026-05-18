@@ -5,9 +5,9 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../lib/supabase';
 import { COLORS } from '../theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -84,7 +84,7 @@ export function BagScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>My Bag</Text>
         <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate('AddEditDisc')}>

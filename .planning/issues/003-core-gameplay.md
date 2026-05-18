@@ -1,3 +1,5 @@
+Status: Completed
+
 ## What to build
 Develop the core gameplay scorecard interface and the underlying offline-sync logic.
 

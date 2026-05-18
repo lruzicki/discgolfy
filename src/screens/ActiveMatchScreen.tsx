@@ -595,14 +595,14 @@ export function ActiveMatchScreen() {
 
   if (loading || (activeItem?.type === 'hole' && !currentHole)) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 100 }} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View style={styles.headerInfo}>
           <Text style={styles.headerHoleText}>

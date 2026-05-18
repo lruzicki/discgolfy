@@ -1,3 +1,5 @@
+Status: Completed
+
 ## Parent
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 
@@ -8,9 +10,9 @@ Expand the functionality of the active match screen to handle common player need
 2. **Throw History View**: Implement a way to view all previously recorded throws for the *current hole*. This should show the throw number, the disc used (with its color), and the calculated distance.
 
 ## Acceptance criteria
-- [ ] Users can navigate to the disc creation screen without leaving an active match.
-- [ ] The "Select Disc" list updates immediately if a new disc is added.
-- [ ] Throw history is accessible and displays accurate data from the `throws` table for the current hole/player.
+- [x] Users can navigate to the disc creation screen without leaving an active match.
+- [x] The "Select Disc" list updates immediately if a new disc is added.
+- [x] Throw history is accessible and displays accurate data from the `throws` table for the current hole/player.
 
 ## Blocked by
 None - can start immediately.

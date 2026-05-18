@@ -1,3 +1,5 @@
+Status: Completed
+
 ## Parent
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 
@@ -9,10 +11,10 @@ Improve the User Experience of the GPS throw tracking and map visualization duri
 3. **Active Feedback**: Add a clear visual indicator (e.g., a pulsing red dot or a "Recording..." status bar) on the map or scorecard when a GPS measurement is in progress.
 
 ## Acceptance criteria
-- [ ] Map defaults to Satellite view on hole load.
-- [ ] Measurement button icon toggles correctly between `ruler` and `stop-circle`.
-- [ ] User receives immediate visual confirmation that their starting position has been recorded.
-- [ ] Visual indicator disappears once the throw is finalized or cancelled.
+- [x] Map defaults to Satellite view on hole load.
+- [x] Measurement button icon toggles correctly between `ruler` and `stop-circle`.
+- [x] User receives immediate visual confirmation that their starting position has been recorded.
+- [x] Visual indicator disappears once the throw is finalized or cancelled.
 
 ## Blocked by
 None - can start immediately.

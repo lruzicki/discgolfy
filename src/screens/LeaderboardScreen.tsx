@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -126,7 +126,7 @@ export function LeaderboardScreen() {
         </View>
         <TouchableOpacity 
           style={styles.viewBtn}
-          onPress={() => Alert.alert('Coming Soon', 'Detailed match view is being developed.')}
+          onPress={() => navigation.navigate('MatchSummary', { matchId: item.id })}
         >
           <Text style={styles.viewBtnText}>VIEW ROUND</Text>
           <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
@@ -136,7 +136,7 @@ export function LeaderboardScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>Global Board</Text>
         <Text style={styles.subTitle}>Recently completed matches</Text>

@@ -1,3 +1,5 @@
+Status: Completed
+
 ## Parent
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 
@@ -10,11 +12,11 @@ The tabs should be:
 3. **Profile**: The existing `ProfileScreen`.
 
 ## Acceptance criteria
-- [ ] `@react-navigation/bottom-tabs` is installed and configured.
-- [ ] Bottom tab bar is visible on all main screens (Play, Leaderboard, Profile).
-- [ ] "Play" tab intelligently handles active vs. new match state.
-- [ ] Navigation state is preserved when switching between tabs.
-- [ ] Tab icons use `Ionicons` consistent with the app theme.
+- [x] `@react-navigation/bottom-tabs` is installed and configured.
+- [x] Bottom tab bar is visible on all main screens (Play, Leaderboard, Profile).
+- [x] "Play" tab intelligently handles active vs. new match state.
+- [x] Navigation state is preserved when switching between tabs.
+- [x] Tab icons use `Ionicons` consistent with the app theme.
 
 ## Blocked by
 None - can start immediately.
