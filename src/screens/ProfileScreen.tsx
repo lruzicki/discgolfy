@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
@@ -7,6 +7,88 @@ import { supabase } from '../lib/supabase';
 export function ProfileScreen({ route, navigation }: any) {
   const { name, email } = route.params || {};
   const displayName = name || 'Lucas';
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    roundsPlayed: 0,
+    avgScore: 0,
+    bestHole: 'N/A',
+    bestHoleInfo: '',
+    totalThrows: 0
+  });
+
+  useEffect(() => {
+    fetchProfileStats();
+  }, []);
+
+  const fetchProfileStats = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (!profile) return;
+
+      // 1. Fetch Rounds Played
+      const { count: roundsCount } = await supabase
+        .from('match_players')
+        .select('*', { count: 'exact', head: true })
+        .eq('player_id', profile.id);
+
+      // 2. Fetch All Scores for calculations
+      const { data: scoresData } = await supabase
+        .from('scores')
+        .select(`
+          strokes,
+          holes ( par, hole_number )
+        `)
+        .eq('player_id', profile.id)
+        .not('strokes', 'is', null);
+
+      let totalStrokes = 0;
+      let totalPar = 0;
+      let bestDiff = Infinity;
+      let bestHoleStr = 'N/A';
+      let bestHoleDetails = '';
+
+      if (scoresData && scoresData.length > 0) {
+        scoresData.forEach((s: any) => {
+          totalStrokes += s.strokes;
+          totalPar += s.holes.par;
+          const diff = s.strokes - s.holes.par;
+          
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            if (diff <= -3) bestHoleStr = 'Albatross+';
+            else if (diff === -2) bestHoleStr = 'Eagle';
+            else if (diff === -1) bestHoleStr = 'Birdie';
+            else if (diff === 0) bestHoleStr = 'Par';
+            else bestHoleStr = 'Bogey+';
+            
+            bestHoleDetails = `(Hole ${s.holes.hole_number})`;
+          }
+        });
+      }
+
+      setStats({
+        roundsPlayed: roundsCount || 0,
+        avgScore: scoresData && scoresData.length > 0 ? (totalStrokes - totalPar) / (roundsCount || 1) : 0,
+        bestHole: bestHoleStr,
+        bestHoleInfo: bestHoleDetails,
+        totalThrows: totalStrokes
+      });
+
+    } catch (error) {
+      console.error('Error fetching profile stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -14,6 +96,14 @@ export function ProfileScreen({ route, navigation }: any) {
       Alert.alert('Error', error.message);
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -38,14 +128,20 @@ export function ProfileScreen({ route, navigation }: any) {
               <MaterialCommunityIcons name="history" size={16} color={COLORS.textSecondary} />
               <Text style={styles.statLabel}>ROUNDS PLAYED</Text>
             </View>
-            <Text style={styles.statValue}>85</Text>
+            <Text style={styles.statValue}>{stats.roundsPlayed}</Text>
           </View>
           <View style={styles.statCardHalf}>
             <View style={styles.statHeader}>
               <Ionicons name="trending-up" size={16} color={COLORS.textSecondary} />
               <Text style={styles.statLabel}>AVG. SCORE</Text>
             </View>
-            <Text style={[styles.statValue, { color: COLORS.success }]}>-3</Text>
+            <Text style={[
+              styles.statValue, 
+              stats.avgScore < 0 && { color: COLORS.success },
+              stats.avgScore > 0 && { color: '#FF5252' }
+            ]}>
+              {stats.avgScore === 0 ? 'E' : (stats.avgScore > 0 ? `+${stats.avgScore.toFixed(1)}` : stats.avgScore.toFixed(1))}
+            </Text>
           </View>
         </View>
 
@@ -55,8 +151,8 @@ export function ProfileScreen({ route, navigation }: any) {
             <Text style={styles.statLabel}>BEST HOLE</Text>
           </View>
           <View style={styles.bestHoleRow}>
-            <Text style={styles.statValue}>Ace</Text>
-            <Text style={styles.bestHoleSubtext}>(Hole 7)</Text>
+            <Text style={styles.statValue}>{stats.bestHole}</Text>
+            <Text style={styles.bestHoleSubtext}>{stats.bestHoleInfo}</Text>
           </View>
         </View>
 
@@ -65,7 +161,7 @@ export function ProfileScreen({ route, navigation }: any) {
             <Ionicons name="disc-outline" size={16} color={COLORS.textSecondary} />
             <Text style={styles.statLabel}>TOTAL THROWS</Text>
           </View>
-          <Text style={styles.statValue}>4,560</Text>
+          <Text style={styles.statValue}>{stats.totalThrows.toLocaleString()}</Text>
         </View>
 
         <View style={styles.actionGrid}>
@@ -244,5 +340,9 @@ const styles = StyleSheet.create({
     color: '#FF5252',
     fontSize: 16,
     fontWeight: '600',
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
