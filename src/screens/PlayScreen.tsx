@@ -1,21 +1,98 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { COLORS } from '../theme';
 import { useMatchStore } from '../store/useMatchStore';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { supabase } from '../lib/supabase';
+
+interface ActiveMatch {
+  id: string;
+  date_played: string;
+  layout_name: string;
+  course_name: string;
+  player_count: number;
+}
 
 export function PlayScreen() {
   const navigation = useNavigation<any>();
-  const { matchId } = useMatchStore();
+  const isFocused = useIsFocused();
+  const { setMatchId } = useMatchStore();
+  
+  const [loading, setLoading] = useState(true);
+  const [activeMatches, setActiveMatches] = useState<ActiveMatch[]>([]);
 
-  const handleStartResume = () => {
-    if (matchId) {
-      navigation.navigate('ActiveMatch');
-    } else {
-      navigation.navigate('SelectCourse');
+  useEffect(() => {
+    if (isFocused) {
+      fetchActiveMatches();
+    }
+  }, [isFocused]);
+
+  const fetchActiveMatches = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (!profile) return;
+
+      const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          id,
+          date_played,
+          status,
+          layouts (
+            name,
+            courses ( name )
+          ),
+          match_players ( count )
+        `)
+        .eq('created_by', profile.id)
+        .eq('status', 'active')
+        .order('date_played', { ascending: false });
+
+      if (error) throw error;
+
+      const formatted: ActiveMatch[] = (data || []).map((m: any) => ({
+        id: m.id,
+        date_played: m.date_played,
+        layout_name: m.layouts?.name || 'Unknown',
+        course_name: m.layouts?.courses?.name || 'Unknown',
+        player_count: m.match_players?.[0]?.count || 0,
+      }));
+
+      setActiveMatches(formatted);
+    } catch (error) {
+      console.error('Error fetching active matches:', error);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handleResumeMatch = (match: ActiveMatch) => {
+    setMatchId(match.id);
+    navigation.navigate('ActiveMatch');
+  };
+
+  const renderActiveMatch = (match: ActiveMatch) => (
+    <TouchableOpacity key={match.id} style={styles.matchCard} onPress={() => handleResumeMatch(match)}>
+      <View style={styles.matchIcon}>
+        <MaterialCommunityIcons name="play-circle" size={28} color={COLORS.primary} />
+      </View>
+      <View style={styles.matchInfo}>
+        <Text style={styles.matchCourse}>{match.course_name}</Text>
+        <Text style={styles.matchLayout}>{match.layout_name} • {match.player_count} Players</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -23,50 +100,56 @@ export function PlayScreen() {
         <Text style={styles.title}>Play</Text>
       </View>
       
-      <View style={styles.content}>
-        <TouchableOpacity style={styles.mainCard} onPress={handleStartResume}>
-          <View style={styles.iconContainer}>
-            <MaterialCommunityIcons 
-              name={matchId ? "play-circle" : "plus-circle"} 
-              size={80} 
-              color={COLORS.primary} 
-            />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {activeMatches.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ACTIVE ROUNDS</Text>
+            {activeMatches.map(renderActiveMatch)}
           </View>
-          <Text style={styles.cardTitle}>
-            {matchId ? 'Active Round' : 'Start New Round'}
-          </Text>
-          <Text style={styles.cardSubtext}>
-            {matchId 
-              ? 'You have a match in progress. Resume to continue scoring.' 
-              : 'Find a course and start tracking your game.'}
-          </Text>
-          <View style={styles.mainBtn}>
-            <Text style={styles.mainBtnText}>
-              {matchId ? 'RESUME ROUND' : 'START ROUND'}
-            </Text>
-          </View>
-        </TouchableOpacity>
+        )}
 
-        {!matchId && (
-          <View style={styles.secondaryRow}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>NEW ROUND</Text>
+          <TouchableOpacity 
+            style={styles.mainActionCard} 
+            onPress={() => navigation.navigate('SelectCourse')}
+          >
+            <View style={styles.actionIconContainer}>
+              <MaterialCommunityIcons name="plus-circle" size={48} color={COLORS.primary} />
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Start New Match</Text>
+              <Text style={styles.actionSubtext}>Choose a course and invite friends</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+          <View style={styles.quickRow}>
             <TouchableOpacity 
-              style={styles.secondaryCard} 
+              style={styles.quickCard} 
               onPress={() => navigation.navigate('SelectCourse')}
             >
               <Ionicons name="map-outline" size={24} color={COLORS.primary} />
-              <Text style={styles.secondaryText}>Courses</Text>
+              <Text style={styles.quickText}>Courses</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={styles.secondaryCard} 
+              style={styles.quickCard} 
               onPress={() => navigation.navigate('Profile', { screen: 'ProfileHome' })}
             >
               <Ionicons name="history" size={24} color={COLORS.primary} />
-              <Text style={styles.secondaryText}>History</Text>
+              <Text style={styles.quickText}>History</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {loading && activeMatches.length === 0 && (
+          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginTop: 20 }} />
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -87,77 +170,99 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     letterSpacing: -0.5,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
     padding: 20,
-    justifyContent: 'center',
+    paddingBottom: 100,
   },
-  mainCard: {
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.textSecondary,
+    letterSpacing: 1.5,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  matchCard: {
+    flexDirection: 'row',
     backgroundColor: COLORS.surface,
-    borderRadius: 28,
-    padding: 32,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  matchIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: 'rgba(144, 202, 249, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  matchInfo: {
+    flex: 1,
+  },
+  matchCourse: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  matchLayout: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  mainActionCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 24,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.borderDark,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-    marginBottom: 20,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(144, 202, 249, 0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+  actionIconContainer: {
+    marginRight: 20,
   },
-  cardTitle: {
+  actionContent: {
+    flex: 1,
+  },
+  actionTitle: {
     color: COLORS.text,
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: '800',
-    marginBottom: 12,
   },
-  cardSubtext: {
+  actionSubtext: {
     color: COLORS.textSecondary,
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
+    fontSize: 14,
+    marginTop: 4,
   },
-  mainBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  mainBtnText: {
-    color: COLORS.onPrimary,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  secondaryRow: {
+  quickRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
-  secondaryCard: {
+  quickCard: {
     flex: 1,
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: COLORS.borderDark,
-    gap: 10,
+    gap: 8,
   },
-  secondaryText: {
+  quickText: {
     color: COLORS.text,
     fontSize: 14,
     fontWeight: '700',
