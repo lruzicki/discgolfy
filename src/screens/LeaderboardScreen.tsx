@@ -205,6 +205,27 @@ export function LeaderboardScreen() {
     </View>
   );
 
+  const renderPlayer = ({ item, index }: { item: PlayerRanking, index: number }) => (
+    <View style={styles.throwCard}>
+      <View style={[styles.rankBadge, index === 0 && styles.rankGold, index === 1 && styles.rankSilver, index === 2 && styles.rankBronze]}>
+        <Text style={styles.rankText}>{index + 1}</Text>
+      </View>
+      <View style={styles.throwInfo}>
+        <Text style={styles.throwPlayer}>{item.display_name}</Text>
+        <Text style={styles.throwSubtext}>{item.rounds_played} rounds • Best: {item.best_score === 0 ? 'E' : (item.best_score > 0 ? `+${item.best_score}` : item.best_score)}</Text>
+      </View>
+      <View style={styles.throwValue}>
+        <Text style={[
+          styles.distanceValue,
+          item.avg_diff < 0 && { color: COLORS.success },
+          item.avg_diff > 0 && { color: '#FF5252' }
+        ]}>
+          {item.avg_diff === 0 ? 'E' : (item.avg_diff > 0 ? `+${item.avg_diff.toFixed(1)}` : item.avg_diff.toFixed(1))}
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -222,6 +243,12 @@ export function LeaderboardScreen() {
           >
             <Text style={[styles.tabText, activeTab === 'throws' && styles.activeTabText]}>Top Throws</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'players' && styles.activeTab]} 
+            onPress={() => setActiveTab('players')}
+          >
+            <Text style={[styles.tabText, activeTab === 'players' && styles.activeTabText]}>Players</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -231,16 +258,19 @@ export function LeaderboardScreen() {
         </View>
       ) : (
         <FlatList
-          data={activeTab === 'rounds' ? matches : topThrows}
+          data={activeTab === 'rounds' ? matches : (activeTab === 'throws' ? topThrows : playerRankings)}
           keyExtractor={(item) => item.id}
-          renderItem={activeTab === 'rounds' ? renderMatch : renderThrow as any}
+          renderItem={
+            activeTab === 'rounds' ? renderMatch : 
+            (activeTab === 'throws' ? renderThrow as any : renderPlayer as any)
+          }
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={onRefresh}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MaterialCommunityIcons 
-                name={activeTab === 'rounds' ? "trophy-outline" : "arrow-up-right-bold"} 
+                name={activeTab === 'rounds' ? "trophy-outline" : (activeTab === 'throws' ? "arrow-up-right-bold" : "account-group-outline")} 
                 size={64} 
                 color={COLORS.borderDark} 
               />
@@ -419,6 +449,50 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   throwPlayer: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  throwSubtext: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  throwValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  distanceValue: {
+    color: COLORS.primary,
+    fontSize: 24,
+    fontWeight: '800',
+    fontFamily: 'JetBrains Mono',
+  },
+  unitText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    marginTop: 100,
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 20,
+    textAlign: 'center',
+  },
+});
+layer: {
     color: COLORS.text,
     fontSize: 16,
     fontWeight: '700',

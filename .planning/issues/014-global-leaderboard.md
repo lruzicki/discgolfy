@@ -4,13 +4,20 @@ Status: Completed
 [PRD-mvp-polish.md](../PRD-mvp-polish.md)
 
 ## What to build
-Implement the functional Global Leaderboard (Global Board) as defined in the feature specification. This screen should display recently completed matches from across the entire community.
+Implement the functional Global Leaderboard (Global Board) as defined in the feature specification. This screen should display stats of each user and option filter it, examples:
+- longest shots
+- longest put
+- most shots
+- most games
+- avg score
+- best score
+- worst score
+- also we could allow to filter map + layout.
+
+Design for this is in:
+/discgolfy/stitch_course_selection_overlay/leaderboard_refined_ranking_with_filters/screen.png
 
 ## Acceptance criteria
-- [x] Screen displays a chronological list of recently completed matches.
-- [x] Each entry shows: Course Name, Date, Players, and their final scores.
-- [x] Data is fetched from Supabase using an optimized query or View.
-- [x] Tapping a match entry navigates to a read-only summary of that match.
+- [] Screen displays a list of stats based on filters
+- [] Data is fetched from Supabase using an optimized query or View.
 
-## Blocked by
-- [010-tab-navigation-architecture.md](./010-tab-navigation-architecture.md)
