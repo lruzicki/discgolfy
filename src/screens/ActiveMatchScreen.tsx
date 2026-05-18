@@ -135,8 +135,8 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
   );
 };
 
-const MapComponent = ({ hole }: { hole: Hole | null }) => {
-  const [isSatellite, setIsSatellite] = useState(false);
+const MapComponent = ({ hole, isRecording }: { hole: Hole | null, isRecording: boolean }) => {
+  const [isSatellite, setIsSatellite] = useState(true);
 
   if (!hole) return null;
 
@@ -153,12 +153,46 @@ const MapComponent = ({ hole }: { hole: Hole | null }) => {
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-          body { margin: 0; padding: 0; background: #000; }
+          body { margin: 0; padding: 0; background: #000; font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
           #map { height: 100vh; width: 100vw; }
           ${!isSatellite ? '.leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }' : ''}
+          .recording-badge {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 82, 82, 0.9);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            z-index: 1000;
+            display: ${isRecording ? 'flex' : 'none'};
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            letter-spacing: 0.5px;
+          }
+          .dot {
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 3px;
+            animation: pulse 1s infinite;
+          }
+          @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+            100% { opacity: 1; transform: scale(1); }
+          }
         </style>
       </head>
       <body>
+        <div class="recording-badge">
+          <div class="dot"></div>
+          RECORDING THROW...
+        </div>
         <div id="map"></div>
         <script>
           const map = L.map('map', {
@@ -529,7 +563,7 @@ export function ActiveMatchScreen() {
 
       {activeItem?.type === 'hole' && currentHole ? (
         <>
-          <MapComponent hole={currentHole} />
+          <MapComponent hole={currentHole} isRecording={!!pendingThrow} />
 
           <View style={styles.scorecardContainer}>
             <View style={styles.scorecardHeader}>
@@ -540,7 +574,7 @@ export function ActiveMatchScreen() {
                   onPress={!pendingThrow ? handleStartThrow : handleEndThrow}
                 >
                   <MaterialCommunityIcons 
-                    name={!pendingThrow ? "ruler" : "check"} 
+                    name={!pendingThrow ? "ruler" : "stop-circle"} 
                     size={22} 
                     color={pendingThrow ? COLORS.onPrimary : COLORS.textSecondary} 
                   />
