@@ -1,18 +1,31 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
+import * as Location from 'expo-location';
 import { ActiveMatchScreen } from '../screens/ActiveMatchScreen';
 import { useMatchStore } from '../store/useMatchStore';
 
 const mockSupabaseFrom = jest.fn();
+const mockInjectedScripts: string[] = [];
 
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
   MaterialCommunityIcons: 'MaterialCommunityIcons',
 }));
 
-jest.mock('react-native-webview', () => ({
-  WebView: 'WebView',
-}));
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return {
+    WebView: React.forwardRef((props: any, ref: any) => {
+      React.useImperativeHandle(ref, () => ({
+        injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+      }));
+
+      return React.createElement(View, { ...props, testID: props.testID || 'match-map-webview' });
+    }),
+  };
+});
 
 jest.mock('expo-location', () => ({
   Accuracy: { High: 'high' },
@@ -59,6 +72,7 @@ function mockEqQuery(result: any) {
 describe('Active Match resume guard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockInjectedScripts.length = 0;
     useMatchStore.getState().resetMatch();
     mockSupabaseFrom.mockReturnValue(mockOrderedQuery({ data: [], error: null }));
   });
@@ -135,5 +149,77 @@ describe('Active Match resume guard', () => {
         },
       });
     });
+  });
+
+  it('keeps one map document alive while GPS marker updates are pushed into the WebView', async () => {
+    let onLocationChange: ((location: any) => void) | undefined;
+
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+    (Location.watchPositionAsync as jest.Mock).mockImplementation(async (_options, callback) => {
+      onLocationChange = callback;
+      return { remove: jest.fn() };
+    });
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores') {
+        return mockEqQuery({ data: [], error: null });
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('match-map-webview')).toBeTruthy();
+    });
+
+    const initialSource = screen.getByTestId('match-map-webview').props.source;
+
+    act(() => {
+      onLocationChange?.({
+        coords: {
+          latitude: 54.0005,
+          longitude: 18.0005,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockInjectedScripts.some(script => script.includes('54.0005') && script.includes('18.0005'))).toBe(true);
+    });
+
+    expect(screen.getByTestId('match-map-webview').props.source).toBe(initialSource);
   });
 });

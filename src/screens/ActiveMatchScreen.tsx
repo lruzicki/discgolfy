@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -58,6 +58,183 @@ interface ThrowRecord {
     color_rgba: string;
   } | null;
 }
+
+const MATCH_MAP_HTML = `
+  <!DOCTYPE html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
+        body { margin: 0; padding: 0; background: #000; font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #map { height: 100vh; width: 100vw; }
+        body:not(.satellite) .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+        .recording-badge {
+          position: absolute;
+          top: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(255, 82, 82, 0.9);
+          color: white;
+          padding: 4px 12px;
+          border-radius: 20px;
+          font-size: 10px;
+          font-weight: 800;
+          z-index: 1000;
+          display: none;
+          align-items: center;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+          letter-spacing: 0.5px;
+        }
+        .dot {
+          width: 6px;
+          height: 6px;
+          background: white;
+          border-radius: 3px;
+          animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+          0% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        .player-marker {
+          width: 14px;
+          height: 14px;
+          background: #2196F3;
+          border: 2px solid white;
+          border-radius: 50%;
+          box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+        }
+      </style>
+    </head>
+    <body class="satellite">
+      <div class="recording-badge">
+        <div class="dot"></div>
+        RECORDING THROW...
+      </div>
+      <div id="map"></div>
+      <script>
+        window.setMapState = function(nextState) {
+          window.pendingMapState = nextState;
+          if (window.applyMapState) {
+            window.applyMapState(nextState);
+          }
+        };
+
+        const map = L.map('map', {
+          zoomControl: false,
+          attributionControl: false
+        });
+
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+        const teeIcon = L.divIcon({
+          className: 'custom-div-icon',
+          html: "<div style='background-color:#FFC107;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:black;font-weight:bold;font-size:10px;'>T</div>",
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+
+        const basketIcon = L.divIcon({
+          className: 'custom-div-icon',
+          html: "<div style='background-color:#E64A19;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:10px;'>B</div>",
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+
+        const playerIcon = L.divIcon({ className: 'player-marker' });
+
+        let teeMarker;
+        let basketMarker;
+        let holeLine;
+        let playerMarker;
+        let throwLine;
+        let currentLayer;
+
+        function hasPoint(point) {
+          return point && Number.isFinite(point.lat) && Number.isFinite(point.lng);
+        }
+
+        function setLayer(layer) {
+          if (currentLayer === layer) return;
+          if (currentLayer) map.removeLayer(currentLayer);
+          currentLayer = layer;
+          currentLayer.addTo(map);
+        }
+
+        function setMarker(marker, point, icon) {
+          const latLng = [point.lat, point.lng];
+          if (!marker) return L.marker(latLng, { icon }).addTo(map);
+          marker.setLatLng(latLng);
+          return marker;
+        }
+
+        function removeLayer(layer) {
+          if (layer) map.removeLayer(layer);
+          return null;
+        }
+
+        window.applyMapState = function(state) {
+          if (!state || !hasPoint(state.tee) || !hasPoint(state.basket)) return;
+
+          document.body.classList.toggle('satellite', !!state.isSatellite);
+          document.querySelector('.recording-badge').style.display = state.isRecording ? 'flex' : 'none';
+          setLayer(state.isSatellite ? satellite : osm);
+
+          teeMarker = setMarker(teeMarker, state.tee, teeIcon);
+          basketMarker = setMarker(basketMarker, state.basket, basketIcon);
+
+          const linePoints = [[state.tee.lat, state.tee.lng], [state.basket.lat, state.basket.lng]];
+          if (!holeLine) {
+            holeLine = L.polyline(linePoints, {
+              color: state.isSatellite ? '#FFF' : state.primaryColor,
+              weight: 2,
+              dashArray: '5, 10',
+              opacity: 0.5
+            }).addTo(map);
+          } else {
+            holeLine.setLatLngs(linePoints);
+            holeLine.setStyle({ color: state.isSatellite ? '#FFF' : state.primaryColor });
+          }
+
+          if (hasPoint(state.playerPos)) {
+            playerMarker = setMarker(playerMarker, state.playerPos, playerIcon);
+          } else {
+            playerMarker = removeLayer(playerMarker);
+          }
+
+          if (hasPoint(state.throwStart) && hasPoint(state.playerPos)) {
+            const throwPoints = [[state.throwStart.lat, state.throwStart.lng], [state.playerPos.lat, state.playerPos.lng]];
+            if (!throwLine) {
+              throwLine = L.polyline(throwPoints, {
+                color: '#FF5252',
+                weight: 4,
+                dashArray: '1, 6'
+              }).addTo(map);
+            } else {
+              throwLine.setLatLngs(throwPoints);
+            }
+          } else {
+            throwLine = removeLayer(throwLine);
+          }
+
+          const bounds = L.latLngBounds(linePoints);
+          if (hasPoint(state.playerPos)) bounds.extend([state.playerPos.lat, state.playerPos.lng]);
+          if (hasPoint(state.throwStart)) bounds.extend([state.throwStart.lat, state.throwStart.lng]);
+          map.fitBounds(bounds, { padding: [40, 40] });
+        };
+
+        if (window.pendingMapState) {
+          window.applyMapState(window.pendingMapState);
+        }
+      </script>
+    </body>
+  </html>
+`;
 
 const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Player[], scores: any }) => {
   const chunks = [];
@@ -198,149 +375,46 @@ const MapComponent = ({ hole, isRecording, playerPos, throwStart }: {
   throwStart: { lat: number, lng: number } | null
 }) => {
   const [isSatellite, setIsSatellite] = useState(true);
+  const mapRef = useRef<any>(null);
+  const webViewSource = useMemo(() => ({ html: MATCH_MAP_HTML }), []);
+
+  const teeLat = hole ? Number(hole.tee_latitude) : 0;
+  const teeLng = hole ? Number(hole.tee_longitude) : 0;
+  const basketLat = hole ? Number(hole.basket_latitude) : 0;
+  const basketLng = hole ? Number(hole.basket_longitude) : 0;
+
+  const mapState = useMemo(() => ({
+    isSatellite,
+    isRecording,
+    primaryColor: COLORS.primary,
+    tee: { lat: teeLat, lng: teeLng },
+    basket: { lat: basketLat, lng: basketLng },
+    playerPos,
+    throwStart,
+  }), [basketLat, basketLng, isRecording, isSatellite, playerPos, teeLat, teeLng, throwStart]);
+
+  const updateMapScript = useMemo(() => {
+    if (!hole) return '';
+    return `window.setMapState(${JSON.stringify(mapState)}); true;`;
+  }, [hole, mapState]);
+
+  useEffect(() => {
+    if (!updateMapScript) return;
+    mapRef.current?.injectJavaScript(updateMapScript);
+  }, [updateMapScript]);
 
   if (!hole) return null;
-
-  const teeLat = Number(hole.tee_latitude);
-  const teeLng = Number(hole.tee_longitude);
-  const basketLat = Number(hole.basket_latitude);
-  const basketLng = Number(hole.basket_longitude);
-
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-          body { margin: 0; padding: 0; background: #000; font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-          #map { height: 100vh; width: 100vw; }
-          ${!isSatellite ? '.leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }' : ''}
-          .recording-badge {
-            position: absolute;
-            top: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 82, 82, 0.9);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 10px;
-            font-weight: 800;
-            z-index: 1000;
-            display: ${isRecording ? 'flex' : 'none'};
-            align-items: center;
-            gap: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            letter-spacing: 0.5px;
-          }
-          .dot {
-            width: 6px;
-            height: 6px;
-            background: white;
-            border-radius: 3px;
-            animation: pulse 1s infinite;
-          }
-          @keyframes pulse {
-            0% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.8); }
-            100% { opacity: 1; transform: scale(1); }
-          }
-          .player-marker {
-            width: 14px;
-            height: 14px;
-            background: #2196F3;
-            border: 2px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
-          }
-        </style>
-      </head>
-      <body>
-        <div class="recording-badge">
-          <div class="dot"></div>
-          RECORDING THROW...
-        </div>
-        <div id="map"></div>
-        <script>
-          const map = L.map('map', {
-            zoomControl: false,
-            attributionControl: false
-          });
-          
-          const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-          const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-
-          if (${isSatellite}) {
-            satellite.addTo(map);
-          } else {
-            osm.addTo(map);
-          }
-
-          const tee = [${teeLat}, ${teeLng}];
-          const basket = [${basketLat}, ${basketLng}];
-
-          const teeIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: "<div style='background-color:#FFC107;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:black;font-weight:bold;font-size:10px;'>T</div>",
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          });
-
-          const basketIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: "<div style='background-color:#E64A19;width:20px;height:20px;border-radius:10px;border:2px solid white;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:10px;'>B</div>",
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          });
-
-          L.marker(tee, {icon: teeIcon}).addTo(map);
-          L.marker(basket, {icon: basketIcon}).addTo(map);
-
-          // Hole line
-          const holeLine = L.polyline([tee, basket], {
-            color: '${isSatellite ? '#FFF' : COLORS.primary}',
-            weight: 2,
-            dashArray: '5, 10',
-            opacity: 0.5
-          }).addTo(map);
-
-          // Player Marker
-          let playerMarker;
-          if (${!!playerPos}) {
-            const playerIcon = L.divIcon({
-              className: 'player-marker'
-            });
-            playerMarker = L.marker([${playerPos?.lat || 0}, ${playerPos?.lng || 0}], {icon: playerIcon}).addTo(map);
-          }
-
-          // Throw Line
-          if (${!!throwStart && !!playerPos}) {
-            L.polyline([[${throwStart?.lat || 0}, ${throwStart?.lng || 0}], [${playerPos?.lat || 0}, ${playerPos?.lng || 0}]], {
-              color: '#FF5252',
-              weight: 4,
-              dashArray: '1, 6'
-            }).addTo(map);
-          }
-
-          const bounds = L.latLngBounds([tee, basket]);
-          if (${!!playerPos}) bounds.extend([${playerPos?.lat || 0}, ${playerPos?.lng || 0}]);
-          
-          map.fitBounds(bounds, { padding: [40, 40] });
-        </script>
-      </body>
-    </html>
-  `;
 
   return (
     <View style={styles.mapContainer}>
       <WebView 
-        key={isSatellite ? 'sat' : 'osm'}
+        ref={mapRef}
+        testID="match-map-webview"
         originWhitelist={['*']}
-        source={{ html }}
+        source={webViewSource}
         style={styles.map}
         scrollEnabled={false}
+        onLoadEnd={() => mapRef.current?.injectJavaScript(updateMapScript)}
       />
       <TouchableOpacity 
         style={styles.mapToggle} 
