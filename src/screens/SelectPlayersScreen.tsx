@@ -155,10 +155,6 @@ export function SelectPlayersScreen() {
         if (player.id === currentUserProfile?.id) return prev; // Cannot deselect self
         return prev.filter(p => p.id !== player.id);
       }
-      if (prev.length >= 4) {
-        Alert.alert('Squad Full', 'Max 4 players per match.');
-        return prev;
-      }
       return [...prev, player];
     });
   };
@@ -343,7 +339,7 @@ export function SelectPlayersScreen() {
         ListHeaderComponent={
           <>
             <View style={styles.selectionSummary}>
-              <Text style={styles.sectionTitle}>SELECTED ({selectedPlayers.length}/4)</Text>
+              <Text style={styles.sectionTitle}>SELECTED ({selectedPlayers.length})</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectedRow}>
                 {selectedPlayers.map(p => (
                   <TouchableOpacity 
