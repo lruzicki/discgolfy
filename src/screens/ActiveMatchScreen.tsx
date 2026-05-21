@@ -236,7 +236,7 @@ const MATCH_MAP_HTML = `
   </html>
 `;
 
-const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Player[], scores: any }) => {
+export const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Player[], scores: any }) => {
   const chunks = [];
   for (let i = 0; i < holes.length; i += 9) {
     chunks.push(holes.slice(i, i + 9));
@@ -319,11 +319,11 @@ const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Playe
         <View key={chunkIdx} style={styles.summaryTable}>
           {/* Header Row: Hole Numbers */}
           <View style={styles.summaryRow}>
-            <View style={[styles.summaryCell, styles.summaryCellSticky]}>
+            <View style={[styles.summaryCell, styles.summaryCellSticky]} testID="summary-cell-sticky">
               <Text style={styles.summaryLabel}>HOLE</Text>
             </View>
             {chunk.map(h => (
-              <View key={h.id} style={styles.summaryCell}>
+              <View key={h.id} style={styles.summaryCell} testID={`summary-cell-hole-${h.id}`}>
                 <Text style={styles.summaryHoleNum}>{h.hole_number}</Text>
               </View>
             ))}
@@ -1164,8 +1164,9 @@ const styles = StyleSheet.create({
   scoreEvenText: { color: COLORS.textSecondary },
   summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
   summaryRow: { flexDirection: 'row', marginBottom: 2 },
-  summaryCell: { flex: 1, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
-  summaryCellSticky: { minWidth: 100, flex: 0, alignItems: 'flex-start', paddingHorizontal: 4, backgroundColor: 'transparent', marginRight: 8 },
+  summaryCell: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
+  summaryCellSticky: { flex: 2, alignItems: 'flex-start', paddingHorizontal: 4, backgroundColor: 'transparent', marginRight: 8 },
+
   summaryLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   summaryValue: { fontSize: 16, fontWeight: '800', fontFamily: 'JetBrains Mono' },
   summaryHoleNum: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' },
