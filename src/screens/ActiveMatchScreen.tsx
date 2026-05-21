@@ -369,6 +369,7 @@ export function ActiveMatchScreen() {
     incrementScore,
     decrementScore,
     setScore,
+    hydrateScores,
     triggerSync,
     isSyncing
   } = useMatchStore();
@@ -430,7 +431,8 @@ export function ActiveMatchScreen() {
   const currentHole = activeItem?.type === 'hole' ? activeItem.data : null;
 
   useEffect(() => {
-    if (!matchId) {
+    if (!matchId || !layoutId) {
+      setLoading(false);
       navigation.navigate('SelectCourse');
       return;
     }
@@ -445,7 +447,7 @@ export function ActiveMatchScreen() {
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [matchId, layoutId]);
 
   const fetchThrowsForHole = async () => {
     if (!currentHole || !matchId) return;
@@ -527,6 +529,14 @@ export function ActiveMatchScreen() {
         display_name: p.profiles.display_name
       }));
       setPlayers(mappedPlayers);
+
+      const { data: scoreData, error: scoreError } = await supabase
+        .from('scores')
+        .select('hole_id, player_id, strokes')
+        .eq('match_id', matchId);
+
+      if (scoreError) throw scoreError;
+      hydrateScores(scoreData || []);
 
       if (!holeData || holeData.length === 0) {
         Alert.alert('Error', 'No holes found for this layout.');

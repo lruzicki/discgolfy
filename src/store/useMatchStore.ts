@@ -18,12 +18,14 @@ interface MatchState {
 
   // Actions
   setMatchId: (matchId: string) => void;
+  setActiveMatch: (match: { matchId: string; courseId?: string; layoutId: string }) => void;
   setCourse: (courseId: string) => void;
   setLayout: (layoutId: string) => void;
   setActiveHoleIndex: (index: number) => void;
   
   // Scoring actions
   setScore: (holeId: string, playerId: string, strokes: number | null) => void;
+  hydrateScores: (scoreRows: Array<{ hole_id: string; player_id: string; strokes: number | null }>) => void;
   incrementScore: (holeId: string, playerId: string, par: number) => void;
   decrementScore: (holeId: string, playerId: string, par: number) => void;
   
@@ -43,6 +45,11 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   lastSyncError: null,
 
   setMatchId: (matchId) => set({ matchId }),
+  setActiveMatch: ({ matchId, courseId, layoutId }) => set((state) => ({
+    matchId,
+    courseId: courseId ?? state.courseId,
+    layoutId,
+  })),
   setCourse: (courseId) => set({ courseId }),
   setLayout: (layoutId) => set({ layoutId }),
   setActiveHoleIndex: (activeHoleIndex) => set({ activeHoleIndex }),
@@ -66,6 +73,18 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         },
       };
     });
+  },
+
+  hydrateScores: (scoreRows) => {
+    const scores = scoreRows.reduce<Record<string, Record<string, number | null>>>((acc, row) => {
+      acc[row.hole_id] = {
+        ...(acc[row.hole_id] || {}),
+        [row.player_id]: row.strokes,
+      };
+      return acc;
+    }, {});
+
+    set({ scores });
   },
 
   incrementScore: (holeId, playerId, par) => {

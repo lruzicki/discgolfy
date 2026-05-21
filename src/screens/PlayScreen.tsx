@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase';
 
 interface ActiveMatch {
   id: string;
+  layout_id: string;
   date_played: string;
   layout_name: string;
   course_name: string;
@@ -18,7 +19,7 @@ interface ActiveMatch {
 export function PlayScreen() {
   const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
-  const { setMatchId } = useMatchStore();
+  const { setActiveMatch } = useMatchStore();
   
   const [loading, setLoading] = useState(true);
   const [activeMatches, setActiveMatches] = useState<ActiveMatch[]>([]);
@@ -47,6 +48,7 @@ export function PlayScreen() {
         .from('matches')
         .select(`
           id,
+          layout_id,
           date_played,
           status,
           layouts (
@@ -63,6 +65,7 @@ export function PlayScreen() {
 
       const formatted: ActiveMatch[] = (data || []).map((m: any) => ({
         id: m.id,
+        layout_id: m.layout_id,
         date_played: m.date_played,
         layout_name: m.layouts?.name || 'Unknown',
         course_name: m.layouts?.courses?.name || 'Unknown',
@@ -78,7 +81,7 @@ export function PlayScreen() {
   };
 
   const handleResumeMatch = (match: ActiveMatch) => {
-    setMatchId(match.id);
+    setActiveMatch({ matchId: match.id, layoutId: match.layout_id });
     navigation.navigate('ActiveMatch');
   };
 

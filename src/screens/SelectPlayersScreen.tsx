@@ -31,7 +31,7 @@ interface Player {
 
 export function SelectPlayersScreen() {
   const navigation = useNavigation<any>();
-  const { layoutId, setMatchId } = useMatchStore();
+  const { layoutId, setActiveMatch } = useMatchStore();
   
   const [search, setSearch] = useState('');
   const [friends, setFriends] = useState<Player[]>([]);
@@ -249,7 +249,7 @@ export function SelectPlayersScreen() {
       if (playersError) throw playersError;
 
       // 3. Update Store & Navigate
-      setMatchId(match.id);
+      setActiveMatch({ matchId: match.id, layoutId });
       navigation.navigate('ActiveMatch');
 
     } catch (error: any) {

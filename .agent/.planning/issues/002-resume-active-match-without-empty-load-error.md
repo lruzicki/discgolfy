@@ -4,10 +4,10 @@ Make active Match resume navigation reliable after the user starts a Match, leav
 
 ## Acceptance criteria
 
-- [ ] After starting a Match, leaving Active Match and returning opens the same active Match.
-- [ ] The app never calls the active Match load path with an empty Match id.
-- [ ] If no active Match exists, the UI routes the Player to start/select a Match instead of showing an empty load error.
-- [ ] Covered by a navigation/store behavior test for the resume path.
+- [x] After starting a Match, leaving Active Match and returning opens the same active Match.
+- [x] The app never calls the active Match load path with an empty Match id.
+- [x] If no active Match exists, the UI routes the Player to start/select a Match instead of showing an empty load error.
+- [x] Covered by a navigation/store behavior test for the resume path.
 
 ## Blocked by
 
