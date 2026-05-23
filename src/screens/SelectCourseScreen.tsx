@@ -134,8 +134,6 @@ export function SelectCourseScreen({ navigation }: any) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const [isModerator, setIsModerator] = useState(false);
-  const [newLayoutName, setNewLayoutName] = useState('');
-  const [editableHole, setEditableHole] = useState<any | null>(null);
   const { setCourse, setLayout } = useMatchStore();
 
   useEffect(() => {
@@ -154,12 +152,6 @@ export function SelectCourseScreen({ navigation }: any) {
     }
   }, [selectedCourseId]);
 
-  useEffect(() => {
-    if (isModerator && selectedLayoutId) {
-      fetchEditableHole(selectedLayoutId);
-    }
-  }, [isModerator, selectedLayoutId]);
-
   const fetchModeratorStatus = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -176,7 +168,7 @@ export function SelectCourseScreen({ navigation }: any) {
   const fetchCourses = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.from('courses').select('*');
+      const { data, error } = await supabase.from('courses').select('*').order('name');
       if (error) throw error;
       setCourses(data || []);
       if (data && data.length > 0 && !selectedCourseId) {
@@ -217,92 +209,23 @@ export function SelectCourseScreen({ navigation }: any) {
     }
   };
 
-  const handlePlayNav = () => {
-    const matchId = useMatchStore.getState().matchId;
-    if (matchId) {
-      navigation.navigate('ActiveMatch');
-    }
-  };
-
-  const addLayout = async () => {
-    if (!selectedCourseId || !newLayoutName.trim()) return;
-
-    const { error } = await supabase.from('layouts').insert({
-      course_id: selectedCourseId,
-      name: newLayoutName.trim(),
-      hole_count: 0,
-    });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    setNewLayoutName('');
-    await fetchLayouts(selectedCourseId);
-  };
-
-  const fetchEditableHole = async (layoutId: string) => {
-    const { data } = await supabase
-      .from('holes')
-      .select('id, layout_id, hole_number, par, tee_latitude, tee_longitude, basket_latitude, basket_longitude')
-      .eq('layout_id', layoutId);
-
-    setEditableHole(data && data.length > 0 ? data[0] : null);
-  };
-
-  const saveHole = async () => {
-    if (!editableHole?.id) return;
-
-    const { error } = await supabase
-      .from('holes')
-      .update({
-        par: Number(editableHole.par),
-        tee_latitude: Number(editableHole.tee_latitude),
-        tee_longitude: Number(editableHole.tee_longitude),
-        basket_latitude: Number(editableHole.basket_latitude),
-        basket_longitude: Number(editableHole.basket_longitude),
-      })
-      .eq('id', editableHole.id);
-
-    if (error) {
-      Alert.alert('Error', error.message);
-    }
-  };
-
-  const addHoleToLayout = async () => {
-    if (!selectedLayoutId) return;
-    const nextHoleNumber = editableHole?.hole_number ? Number(editableHole.hole_number) + 1 : 1;
-    const { error } = await supabase.from('holes').insert({
-      layout_id: selectedLayoutId,
-      hole_number: nextHoleNumber,
-      par: 3,
-      tee_latitude: 0,
-      tee_longitude: 0,
-      basket_latitude: 0,
-      basket_longitude: 0,
-    });
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    await fetchEditableHole(selectedLayoutId);
-  };
-
-  const removeEditableHole = async () => {
-    if (!editableHole?.id || !selectedLayoutId) return;
-    const { error } = await supabase.from('holes').delete().eq('id', editableHole.id);
-    if (error) {
-      Alert.alert('Error', error.message);
-      return;
-    }
-    await fetchEditableHole(selectedLayoutId);
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" />
       
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.pageTitle}>Select Course</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.pageTitle}>Select Course</Text>
+          {isModerator && (
+            <TouchableOpacity 
+              testID="moderator-entry-button"
+              onPress={() => navigation.navigate('ModeratorCourses')}
+              style={styles.moderatorHeaderButton}
+            >
+              <Ionicons name="pencil" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
 
         {isLoading ? (
           <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
@@ -328,48 +251,6 @@ export function SelectCourseScreen({ navigation }: any) {
                 onPlay={handlePlay}
               />
             ))}
-            {isModerator && selectedCourseId && (
-              <View style={styles.moderatorCard}>
-                <Text style={styles.selectLayoutLabel}>Manage Layouts</Text>
-                <TextInput
-                  placeholder="New layout name"
-                  placeholderTextColor={COLORS.textSecondary}
-                  style={styles.moderatorInput}
-                  value={newLayoutName}
-                  onChangeText={setNewLayoutName}
-                />
-                <TouchableOpacity style={styles.moderatorButton} onPress={addLayout}>
-                  <Text style={styles.moderatorButtonText}>Add Layout</Text>
-                </TouchableOpacity>
-                {editableHole && (
-                  <View style={styles.holeEditor}>
-                    <TextInput
-                      placeholder="Par"
-                      placeholderTextColor={COLORS.textSecondary}
-                      style={styles.moderatorInput}
-                      value={String(editableHole.par ?? '')}
-                      onChangeText={(value) => setEditableHole((prev: any) => ({ ...prev, par: value }))}
-                    />
-                    <TextInput
-                      placeholder="Tee lat"
-                      placeholderTextColor={COLORS.textSecondary}
-                      style={styles.moderatorInput}
-                      value={String(editableHole.tee_latitude ?? '')}
-                      onChangeText={(value) => setEditableHole((prev: any) => ({ ...prev, tee_latitude: value }))}
-                    />
-                    <TouchableOpacity style={styles.moderatorButton} onPress={saveHole}>
-                      <Text style={styles.moderatorButtonText}>Save Hole</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.moderatorButton} onPress={addHoleToLayout}>
-                      <Text style={styles.moderatorButtonText}>Add Hole</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.moderatorDangerButton} onPress={removeEditableHole}>
-                      <Text style={styles.moderatorDangerButtonText}>Remove Hole</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
           </View>
         )}
       </ScrollView>
@@ -386,11 +267,21 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
   pageTitle: {
     color: COLORS.text,
     fontSize: 32,
     fontWeight: '700',
-    marginBottom: 24,
+  },
+  moderatorHeaderButton: {
+    padding: 8,
+    backgroundColor: 'rgba(57, 255, 20, 0.1)',
+    borderRadius: 8,
   },
   errorContainer: {
     alignItems: 'center',

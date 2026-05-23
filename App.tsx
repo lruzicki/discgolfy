@@ -16,6 +16,9 @@ import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MatchHistoryScreen } from './src/screens/MatchHistoryScreen';
 import { LongestThrowsScreen } from './src/screens/LongestThrowsScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
+import { ModeratorCoursesScreen } from './src/screens/ModeratorCoursesScreen';
+import { ModeratorCourseDetailsScreen } from './src/screens/ModeratorCourseDetailsScreen';
+import { ModeratorLayoutDetailsScreen } from './src/screens/ModeratorLayoutDetailsScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { StatusBar, ActivityIndicator, View } from 'react-native';
@@ -32,6 +35,9 @@ function PlayStack() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="PlayHome" component={PlayScreen} />
       <Stack.Screen name="SelectCourse" component={SelectCourseScreen} />
+      <Stack.Screen name="ModeratorCourses" component={ModeratorCoursesScreen} />
+      <Stack.Screen name="ModeratorCourseDetails" component={ModeratorCourseDetailsScreen} />
+      <Stack.Screen name="ModeratorLayoutDetails" component={ModeratorLayoutDetailsScreen} />
       <Stack.Screen name="SelectPlayers" component={SelectPlayersScreen} />
       <Stack.Screen name="ActiveMatch" component={ActiveMatchScreen} />
       <Stack.Screen name="MatchSummary" component={MatchSummaryScreen} />
