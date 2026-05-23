@@ -697,7 +697,7 @@ export function ActiveMatchScreen() {
     }
   };
 
-  const finalizeThrow = async (discId: string | null) => {
+  const recordMeasuredThrow = async (discId: string | null) => {
     if (!pendingThrow || !tempEndCoords || !currentHole) return;
     try {
       const distance = calculateDistance(
@@ -737,7 +737,6 @@ export function ActiveMatchScreen() {
       setPendingThrow(null);
       setTempEndCoords(null);
       setIsDiscModalVisible(false);
-      incrementScore(currentHole.id, profile.id, currentHole.par);
       fetchThrowsForHole();
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -962,7 +961,7 @@ export function ActiveMatchScreen() {
               data={discs}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(item.id)}>
+                <TouchableOpacity style={styles.discItem} onPress={() => recordMeasuredThrow(item.id)}>
                   <View style={[styles.discColor, { backgroundColor: item.color_rgba || COLORS.primary }]} />
                   <Text style={styles.discName}>{item.name}</Text>
                 </TouchableOpacity>
@@ -988,7 +987,7 @@ export function ActiveMatchScreen() {
                     </View>
                     <Text style={[styles.discName, { color: COLORS.primary, fontWeight: '700' }]}>Add New Disc</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.discItem} onPress={() => finalizeThrow(null)}>
+                  <TouchableOpacity style={styles.discItem} onPress={() => recordMeasuredThrow(null)}>
                     <View style={[styles.discColor, { backgroundColor: '#555' }]} />
                     <Text style={styles.discName}>Unknown Disc</Text>
                   </TouchableOpacity>

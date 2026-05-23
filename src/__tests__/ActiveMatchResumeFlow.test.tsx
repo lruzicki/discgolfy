@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 import { ActiveMatchScreen } from '../screens/ActiveMatchScreen';
 import { useMatchStore } from '../store/useMatchStore';
+import { supabase } from '../lib/supabase';
 
 const mockSupabaseFrom = jest.fn();
 const mockInjectedScripts: string[] = [];
@@ -629,5 +630,133 @@ describe('Active Match resume guard', () => {
 
     expect(Alert.alert).toHaveBeenCalledWith('Permission Denied', 'Location permission is required.');
     expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('finalizes measured throw by inserting throw without changing strokes', async () => {
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+    (Location.getCurrentPositionAsync as jest.Mock)
+      .mockResolvedValueOnce({ coords: { latitude: 54.1, longitude: 18.1 } })
+      .mockResolvedValueOnce({ coords: { latitude: 54.2, longitude: 18.2 } });
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+      data: { user: { id: 'auth-1' } },
+      error: null,
+    });
+
+    const insertThrow = jest.fn(() => Promise.resolve({ error: null }));
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores') {
+        return mockEqQuery({
+          data: [{
+            hole_id: 'hole-1',
+            player_id: 'player-1',
+            strokes: 3,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'discs') {
+        return mockEqChain({ data: [{ id: 'disc-1', name: 'Driver', color_rgba: '#fff' }], error: null });
+      }
+
+      if (table === 'throws') {
+        return {
+          select: jest.fn((_columns?: string, options?: { count?: 'exact'; head?: boolean }) => {
+            if (options?.count === 'exact' && options?.head === true) {
+              const countQuery: any = {
+                eq: jest.fn(() => countQuery),
+              };
+              countQuery.eq = jest.fn(() => countQuery);
+              countQuery.eq.mockImplementationOnce(() => countQuery);
+              countQuery.eq.mockImplementationOnce(() => countQuery);
+              countQuery.eq.mockImplementationOnce(() => Promise.resolve({ count: 0, error: null }));
+              return countQuery;
+            }
+
+            return {
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  eq: jest.fn(() => ({
+                    order: jest.fn(() => Promise.resolve({ data: [], error: null })),
+                  })),
+                })),
+              })),
+            };
+          }),
+          insert: insertThrow,
+        };
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+    });
+
+    expect(screen.getByText('E (3)')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.UNSAFE_getByProps({ name: 'ruler' }).parent?.parent);
+    });
+    fireEvent.press(screen.UNSAFE_getByProps({ name: 'stop-circle' }).parent?.parent);
+    fireEvent.press(await screen.findByText('Driver'));
+
+    await waitFor(() => {
+      expect(insertThrow).toHaveBeenCalledWith(expect.objectContaining({
+        match_id: 'match-1',
+        player_id: 'player-1',
+        hole_id: 'hole-1',
+        disc_id: 'disc-1',
+        throw_number: 1,
+      }));
+    });
+
+    expect(screen.getByText('E (3)')).toBeTruthy();
+    expect(useMatchStore.getState().scores['hole-1']?.['player-1']).toBe(3);
   });
 });
