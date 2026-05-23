@@ -80,6 +80,11 @@ export function LeaderboardScreen() {
             name,
             course_id,
             holes ( par )
+          ),
+          scores (
+            player_id,
+            strokes,
+            holes ( par )
           )
         )
       `)
@@ -102,13 +107,17 @@ export function LeaderboardScreen() {
     }> = {};
 
     (data || []).forEach((entry: any) => {
-      if (!entry.matches || !entry.total_score) return;
+      if (!entry.matches) return;
       
       const playerId = entry.player_id;
-      const totalPar = entry.matches.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
+      const playedScores = (entry.matches.scores || []).filter(
+        (s: any) => s.player_id === playerId && s.strokes !== null
+      );
+      const totalPar = playedScores.reduce((acc: number, s: any) => acc + (s.holes?.par || 0), 0);
       if (totalPar === 0) return;
 
-      const diff = entry.total_score - totalPar;
+      const totalStrokes = playedScores.reduce((acc: number, s: any) => acc + (s.strokes || 0), 0);
+      const diff = totalStrokes - totalPar;
 
       if (!playerMap[playerId]) {
         playerMap[playerId] = {
@@ -123,7 +132,7 @@ export function LeaderboardScreen() {
 
       playerMap[playerId].totalDiff += diff;
       playerMap[playerId].count += 1;
-      playerMap[playerId].totalStrokes += entry.total_score;
+      playerMap[playerId].totalStrokes += totalStrokes;
       if (diff < playerMap[playerId].bestDiff) {
         playerMap[playerId].bestDiff = diff;
       }

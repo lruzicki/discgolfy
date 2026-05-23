@@ -37,7 +37,7 @@ describe('buildProfileStats', () => {
     expect(stats.totalThrows).toBe(5);
     expect(stats.birdies).toBe(1);
     expect(stats.eagles).toBe(0);
-    expect(stats.bestRound).toBe('+9');
+    expect(stats.bestRound).toBe('-1');
     expect(stats.recentPerformance).toHaveLength(1);
   });
 
@@ -53,5 +53,35 @@ describe('buildProfileStats', () => {
     });
 
     expect(stats.longestThrow).toBe(60);
+  });
+
+  it('computes best round and recent performance from played holes only', () => {
+    const stats = buildProfileStats({
+      roundsCount: 1,
+      bestRoundData: [
+        {
+          total_score: 3,
+          matches: {
+            status: 'completed',
+            date_played: '2026-05-10',
+            layouts: { holes: [{ par: 3 }, { par: 4 }] },
+          },
+        },
+      ],
+      scoresData: [
+        {
+          strokes: 3,
+          holes: { par: 3, hole_number: 1 },
+          matches: { status: 'completed', date_played: '2026-05-10' } as any,
+          match_id: 'match-1',
+        } as any,
+      ],
+      throwData: [],
+    });
+
+    expect(stats.totalThrows).toBe(3);
+    expect(stats.avgScore).toBe(0);
+    expect(stats.bestRound).toBe('E');
+    expect(stats.recentPerformance).toEqual([{ label: '10/5', diff: 0 }]);
   });
 });

@@ -110,4 +110,83 @@ describe('MatchSummaryScreen', () => {
       expect(screen.getByText('BACK TO HUB')).toBeTruthy();
     });
   });
+
+  it('excludes unplayed holes with null strokes from totals and par', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-1',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 2,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { strokes: 3, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } },
+                { strokes: null, player_id: 'player-1', hole_id: 'hole-2', holes: { par: 4 } },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ player_id: 'player-1', profiles: { display_name: 'Alice' } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    useMatchStore.setState({ matchId: 'match-1' });
+
+    const screen = render(<MatchSummaryScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeTruthy();
+      expect(screen.getByText('3')).toBeTruthy();
+      expect(screen.getByText('E')).toBeTruthy();
+    });
+
+    expect(screen.queryByText('+4')).toBeNull();
+  });
 });

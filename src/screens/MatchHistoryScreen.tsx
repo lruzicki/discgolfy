@@ -52,6 +52,7 @@ export function MatchHistoryScreen() {
       const { data, error } = await supabase
         .from('match_players')
         .select(`
+          player_id,
           match_id,
           total_score,
           matches!inner (
@@ -62,6 +63,11 @@ export function MatchHistoryScreen() {
             layouts (
               name,
               courses ( name ),
+              holes ( par )
+            ),
+            scores (
+              player_id,
+              strokes,
               holes ( par )
             )
           )
@@ -74,8 +80,11 @@ export function MatchHistoryScreen() {
 
       const formatted: HistoryEntry[] = (data || []).map((entry: any) => {
         const m = entry.matches;
-        const totalPar = m.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
-        const totalStrokes = entry.total_score || 0;
+        const playedScores = (m.scores || []).filter(
+          (s: any) => s.player_id === entry.player_id && s.strokes !== null
+        );
+        const totalPar = playedScores.reduce((acc: number, s: any) => acc + (s.holes?.par || 0), 0);
+        const totalStrokes = playedScores.reduce((acc: number, s: any) => acc + (s.strokes || 0), 0);
         
         return {
           id: m.id,

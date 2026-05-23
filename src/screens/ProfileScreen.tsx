@@ -146,10 +146,11 @@ export function ProfileScreen({ route, navigation }: any) {
       const { data: scoresData } = await supabase
         .from('scores')
         .select(`
+          match_id,
           strokes,
           created_at,
           holes ( par, hole_number ),
-          matches!inner ( status )
+          matches!inner ( status, date_played )
         `)
         .eq('player_id', profile.id)
         .eq('matches.status', 'completed')

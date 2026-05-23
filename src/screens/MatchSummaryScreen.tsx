@@ -102,9 +102,11 @@ export function MatchSummaryScreen() {
 
       // 4. Calculate totals
       const players = (playerData || []).map((p: any) => {
-        const playerScores = (scoresData || []).filter(s => s.player_id === p.player_id);
-        const totalStrokes = playerScores.reduce((acc, curr) => acc + (curr.strokes || 0), 0);
-        const totalPar = playerScores.reduce((acc, curr) => acc + (curr.holes?.par || 0), 0);
+        const playedScores = (scoresData || []).filter(
+          s => s.player_id === p.player_id && s.strokes !== null
+        );
+        const totalStrokes = playedScores.reduce((acc, curr) => acc + (curr.strokes || 0), 0);
+        const totalPar = playedScores.reduce((acc, curr) => acc + (curr.holes?.par || 0), 0);
         
         return {
           id: p.player_id,

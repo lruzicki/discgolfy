@@ -10,9 +10,10 @@ export interface MatchSummaryRow {
 }
 
 export interface ScoreRow {
-  strokes: number;
+  match_id?: string;
+  strokes: number | null;
   holes: { par: number; hole_number: number };
-  matches?: { status?: string | null } | null;
+  matches?: { status?: string | null; date_played?: string } | null;
 }
 
 export interface ThrowRow {
@@ -41,33 +42,41 @@ export function buildProfileStats(input: {
   scoresData: ScoreRow[];
   throwData: ThrowRow[];
 }): ProfileStatsResult {
-  const completedRounds = (input.bestRoundData || []).filter((r) => isCompleted(r.matches?.status));
-  const completedScores = (input.scoresData || []).filter((s) => isCompleted(s.matches?.status));
+  const completedScores = (input.scoresData || []).filter(
+    (s) => isCompleted(s.matches?.status) && s.strokes !== null
+  );
   const completedThrows = (input.throwData || []).filter((t) => isCompleted(t.matches?.status));
 
   const longestThrow = completedThrows.length
     ? Math.max(...completedThrows.map((t) => t.distance_m || 0))
     : 0;
 
-  let bestRoundDiff = Infinity;
-  completedRounds.forEach((r) => {
-    const totalPar = r.matches?.layouts?.holes?.reduce((acc, h) => acc + h.par, 0) || 0;
-    if (totalPar > 0 && r.total_score !== null) {
-      const diff = r.total_score - totalPar;
-      if (diff < bestRoundDiff) bestRoundDiff = diff;
+  const roundMap: Record<string, { date_played?: string; totalStrokes: number; totalPar: number }> = {};
+  completedScores.forEach((s) => {
+    const key = s.match_id || s.matches?.date_played || 'unknown';
+    if (!roundMap[key]) {
+      roundMap[key] = { date_played: s.matches?.date_played, totalStrokes: 0, totalPar: 0 };
     }
+    roundMap[key].totalStrokes += s.strokes || 0;
+    roundMap[key].totalPar += s.holes.par;
+  });
+  const completedRoundScores = Object.values(roundMap).filter((r) => r.totalPar > 0);
+
+  let bestRoundDiff = Infinity;
+  completedRoundScores.forEach((r) => {
+    const diff = r.totalStrokes - r.totalPar;
+    if (diff < bestRoundDiff) bestRoundDiff = diff;
   });
 
-  const recentPerformance = [...completedRounds]
-    .sort((a, b) => new Date(b.matches?.date_played || 0).getTime() - new Date(a.matches?.date_played || 0).getTime())
+  const recentPerformance = completedRoundScores
+    .sort((a, b) => new Date(b.date_played || 0).getTime() - new Date(a.date_played || 0).getTime())
     .slice(0, 5)
     .reverse()
     .map((r) => {
-      const totalPar = r.matches?.layouts?.holes?.reduce((acc, h) => acc + h.par, 0) || 0;
-      const date = new Date(r.matches?.date_played || 0);
+      const date = new Date(r.date_played || 0);
       return {
         label: `${date.getDate()}/${date.getMonth() + 1}`,
-        diff: (r.total_score || 0) - totalPar,
+        diff: r.totalStrokes - r.totalPar,
       };
     });
 
