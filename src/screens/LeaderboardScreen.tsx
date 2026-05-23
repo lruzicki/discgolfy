@@ -174,10 +174,12 @@ export function LeaderboardScreen() {
         profiles ( display_name ),
         discs ( name ),
         matches!inner (
+          status,
           layout_id,
           layouts!inner ( course_id )
         )
       `)
+      .eq('matches.status', 'completed')
       .not('distance_m', 'is', null);
 
     if (selectedCourse) {

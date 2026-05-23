@@ -54,9 +54,10 @@ export function MatchHistoryScreen() {
         .select(`
           match_id,
           total_score,
-          matches (
+          matches!inner (
             id,
             date_played,
+            status,
             created_by,
             layouts (
               name,
@@ -66,6 +67,7 @@ export function MatchHistoryScreen() {
           )
         `)
         .eq('player_id', profile.id)
+        .eq('matches.status', 'completed')
         .order('matches(date_played)', { ascending: false });
 
       if (error) throw error;

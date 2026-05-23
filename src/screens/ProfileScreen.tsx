@@ -6,6 +6,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Svg, Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
+import { buildProfileStats } from '../services/profileStats';
 
 function RecentPerformanceChart({ data }: { data: { label: string, diff: number }[] }) {
   if (data.length === 0) return null;
@@ -111,25 +112,26 @@ export function ProfileScreen({ route, navigation }: any) {
       // 1. Fetch Rounds Played
       const { count: roundsCount } = await supabase
         .from('match_players')
-        .select('*', { count: 'exact', head: true })
-        .eq('player_id', profile.id);
+        .select('match_id, matches!inner(status)', { count: 'exact', head: true })
+        .eq('player_id', profile.id)
+        .eq('matches.status', 'completed');
 
       // 2. Fetch Longest Throw
       const { data: throwData } = await supabase
         .from('throws')
-        .select('distance_m')
+        .select('distance_m, matches!inner(status)')
         .eq('player_id', profile.id)
+        .eq('matches.status', 'completed')
         .order('distance_m', { ascending: false })
         .limit(1);
-      
-      const longestThrow = throwData?.[0]?.distance_m || 0;
 
       // 3. Fetch Best Round & Recent Rounds
       const { data: bestRoundData } = await supabase
         .from('match_players')
         .select(`
           total_score,
-          matches (
+          matches!inner (
+            status,
             date_played,
             layouts (
               holes ( par )
@@ -137,33 +139,8 @@ export function ProfileScreen({ route, navigation }: any) {
           )
         `)
         .eq('player_id', profile.id)
+        .eq('matches.status', 'completed')
         .not('total_score', 'is', null);
-
-      let bestRoundDiff = Infinity;
-      if (bestRoundData) {
-        bestRoundData.forEach((r: any) => {
-          const totalPar = r.matches?.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
-          if (totalPar > 0) {
-            const diff = (r.total_score || 0) - totalPar;
-            if (diff < bestRoundDiff) bestRoundDiff = diff;
-          }
-        });
-
-        // Set recent performance (last 5 rounds)
-        const recentRounds = [...bestRoundData]
-          .sort((a, b) => new Date(b.matches.date_played).getTime() - new Date(a.matches.date_played).getTime())
-          .slice(0, 5)
-          .reverse()
-          .map(r => {
-            const totalPar = r.matches?.layouts?.holes?.reduce((acc: number, h: any) => acc + h.par, 0) || 0;
-            const date = new Date(r.matches.date_played);
-            return {
-              label: `${date.getDate()}/${date.getMonth() + 1}`,
-              diff: (r.total_score || 0) - totalPar
-            };
-          });
-        setRecentPerformance(recentRounds);
-      }
 
       // 4. Fetch All Scores for counts and performance
       const { data: scoresData } = await supabase
@@ -171,53 +148,32 @@ export function ProfileScreen({ route, navigation }: any) {
         .select(`
           strokes,
           created_at,
-          holes ( par, hole_number )
+          holes ( par, hole_number ),
+          matches!inner ( status )
         `)
         .eq('player_id', profile.id)
+        .eq('matches.status', 'completed')
         .not('strokes', 'is', null)
         .order('created_at', { ascending: false });
-
-      let totalStrokes = 0;
-      let totalPar = 0;
-      let birdies = 0;
-      let eagles = 0;
-      let bestHoleDiff = Infinity;
-      let bestHoleStr = 'N/A';
-      let bestHoleDetails = '';
-
-      if (scoresData) {
-        scoresData.forEach((s: any) => {
-          totalStrokes += s.strokes;
-          totalPar += s.holes.par;
-          const diff = s.strokes - s.holes.par;
-          
-          if (diff === -1) birdies++;
-          if (diff <= -2) eagles++;
-
-          if (diff < bestHoleDiff) {
-            bestHoleDiff = diff;
-            if (diff <= -3) bestHoleStr = 'Albatross+';
-            else if (diff === -2) bestHoleStr = 'Eagle';
-            else if (diff === -1) bestHoleStr = 'Birdie';
-            else if (diff === 0) bestHoleStr = 'Par';
-            else bestHoleStr = 'Bogey+';
-            
-            bestHoleDetails = `(Hole ${s.holes.hole_number})`;
-          }
-        });
-      }
+      const nextStats = buildProfileStats({
+        roundsCount: roundsCount || 0,
+        bestRoundData: bestRoundData || [],
+        scoresData: scoresData || [],
+        throwData: throwData || [],
+      });
 
       setStats({
-        roundsPlayed: roundsCount || 0,
-        avgScore: scoresData && scoresData.length > 0 ? (totalStrokes - totalPar) / (roundsCount || 1) : 0,
-        bestHole: bestHoleStr,
-        bestHoleInfo: bestHoleDetails,
-        totalThrows: totalStrokes,
-        longestThrow,
-        bestRound: bestRoundDiff === Infinity ? 'N/A' : (bestRoundDiff === 0 ? 'E' : (bestRoundDiff > 0 ? `+${bestRoundDiff}` : bestRoundDiff)),
-        birdies,
-        eagles
+        roundsPlayed: nextStats.roundsPlayed,
+        avgScore: nextStats.avgScore,
+        bestHole: nextStats.bestHole,
+        bestHoleInfo: nextStats.bestHoleInfo,
+        totalThrows: nextStats.totalThrows,
+        longestThrow: nextStats.longestThrow,
+        bestRound: nextStats.bestRound,
+        birdies: nextStats.birdies,
+        eagles: nextStats.eagles,
       });
+      setRecentPerformance(nextStats.recentPerformance);
 
     } catch (error) {
       console.error('Error fetching profile data:', error);
