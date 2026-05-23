@@ -20,13 +20,24 @@ jest.mock('../lib/supabase', () => ({
     from: jest.fn((table) => {
       if (table === 'courses') {
         return {
-          select: jest.fn(() => Promise.resolve({
-            data: [
-              { id: '1', name: 'Park Reagana', location: 'Gdańsk' },
-              { id: '2', name: 'Jaśkowa', location: 'Gdańsk' },
-              { id: '3', name: 'Na Zboczu', location: 'Gdańsk' },
-            ],
-            error: null,
+          select: jest.fn(() => ({
+            order: jest.fn(() => Promise.resolve({
+              data: [
+                { id: '1', name: 'Park Reagana', location: 'Gdańsk' },
+                { id: '2', name: 'Jaśkowa', location: 'Gdańsk' },
+                { id: '3', name: 'Na Zboczu', location: 'Gdańsk' },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { is_moderator: false }, error: null })),
+            })),
           })),
         };
       }

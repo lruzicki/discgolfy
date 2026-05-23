@@ -6,6 +6,7 @@ export interface ThrowRankingRow {
   throw_type?: ThrowType | null;
   profiles?: {
     display_name?: string | null;
+    avatar_url?: string | null;
   } | null;
   discs?: {
     name?: string | null;
@@ -15,6 +16,7 @@ export interface ThrowRankingRow {
 interface PlayerRanking {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
   value: string;
   subValue: string;
 }
@@ -34,6 +36,7 @@ function toRankingRows(playerMax: Record<string, ThrowRankingRow>): PlayerRankin
     .map((row) => ({
       id: row.player_id,
       display_name: row.profiles?.display_name || 'Unknown',
+      avatar_url: row.profiles?.avatar_url || null,
       value: `${row.distance_m}m`,
       subValue: row.discs?.name || 'Unknown Disc',
     }))

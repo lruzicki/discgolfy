@@ -23,9 +23,13 @@ import { calculateDistance } from '../lib/utils';
 import { ThrowEventType } from '../constants/throwEvents';
 import { ThrowType } from '../constants/throwTypes';
 
+import { Avatar } from '../components/Avatar';
+import { ScorecardView } from '../components/ScorecardView';
+
 interface Player {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 interface Hole {
@@ -239,146 +243,6 @@ const MATCH_MAP_HTML = `
   </html>
 `;
 
-export const SummaryView = ({ holes, players, scores }: { holes: Hole[], players: Player[], scores: any }) => {
-  const chunks = [];
-  for (let i = 0; i < holes.length; i += 9) {
-    chunks.push(holes.slice(i, i + 9));
-  }
-
-  // Calculate total scores for leaderboard
-  const leaderboard = players.map(player => {
-    let totalStrokes = 0;
-    let totalPar = 0;
-    holes.forEach(h => {
-      const s = scores[h.id]?.[player.id];
-      if (s) {
-        totalStrokes += s;
-        totalPar += h.par;
-      }
-    });
-    return {
-      ...player,
-      totalStrokes,
-      totalPar,
-      diff: totalStrokes - totalPar
-    };
-  }).sort((a, b) => a.diff - b.diff);
-
-  const getScoreStyle = (diff: number | null) => {
-    if (diff === null || diff === 0 || diff === -1 || diff === -2) return {};
-    
-    if (diff === 1) return { backgroundColor: '#E3F2FD', color: '#0D47A1' };
-    if (diff === 2) return { backgroundColor: '#90CAF9', color: '#0D47A1' };
-    if (diff === 3) return { backgroundColor: '#42A5F5', color: '#FFFFFF' };
-    return { backgroundColor: '#1E88E5', color: '#FFFFFF' };
-  };
-
-  return (
-    <ScrollView style={styles.summaryContainer} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Total Leaderboard Section */}
-      <View style={styles.leaderboardSection}>
-        <Text style={styles.leaderboardTitle}>ROUND LEADERBOARD</Text>
-        {leaderboard.map((p, idx) => (
-          <View key={p.id} style={styles.leaderboardPlayerRow}>
-            <View style={styles.leaderboardRankBadge}>
-              <Text style={styles.leaderboardRankBadgeText}>{idx + 1}</Text>
-            </View>
-            
-            <View style={styles.leaderboardAvatar}>
-              <Text style={styles.leaderboardAvatarText}>{p.display_name[0]}</Text>
-            </View>
-
-            <View style={styles.leaderboardInfo}>
-              <Text style={styles.leaderboardPlayerName}>{p.display_name}</Text>
-              <Text style={styles.leaderboardPlayerStatus}>
-                Round in progress
-              </Text>
-            </View>
-
-            <View style={styles.leaderboardScoreContainer}>
-              <Text style={styles.leaderboardTotalStrokes}>{p.totalStrokes}</Text>
-              <View style={[
-                styles.leaderboardDiffBadge,
-                p.diff < 0 && styles.scoreUnderBg,
-                p.diff > 0 && styles.scoreOverBg,
-                p.diff === 0 && styles.scoreEvenBg
-              ]}>
-                <Text style={[
-                  styles.leaderboardDiffText,
-                  p.diff < 0 && styles.scoreUnderText,
-                  p.diff > 0 && styles.scoreOverText,
-                  p.diff === 0 && styles.scoreEvenText
-                ]}>
-                  {p.diff === 0 ? 'E' : (p.diff > 0 ? `+${p.diff}` : p.diff)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        ))}
-      </View>
-
-      <Text style={[styles.leaderboardTitle, { marginTop: 12, marginBottom: 16 }]}>SCORECARD DETAILS</Text>
-      {chunks.map((chunk, chunkIdx) => (
-        <View key={chunkIdx} style={styles.summaryTable}>
-          {/* Header Row: Hole Numbers */}
-          <View style={styles.summaryRow}>
-            <View style={[styles.summaryCell, styles.summaryCellSticky]} testID="summary-cell-sticky">
-              <Text style={styles.summaryLabel}>HOLE</Text>
-            </View>
-            {chunk.map(h => (
-              <View
-                key={h.id}
-                style={[
-                  styles.summaryCell,
-                  players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null) && styles.unplayableSummaryCell,
-                ]}
-                testID={`summary-cell-hole-${h.id}`}
-              >
-                <Text style={styles.summaryHoleNum}>{h.hole_number}</Text>
-              </View>
-            ))}
-          </View>
-          {/* Par Row */}
-          <View style={styles.summaryRow}>
-            <View style={[styles.summaryCell, styles.summaryCellSticky]}>
-              <Text style={styles.summaryLabel}>PAR</Text>
-            </View>
-            {chunk.map(h => (
-              <View key={h.id} style={styles.summaryCell}>
-                <Text style={styles.summaryPar}>{h.par}</Text>
-              </View>
-            ))}
-          </View>
-          {/* Player Rows */}
-          {players.map(player => (
-            <View key={player.id} style={styles.summaryRow}>
-              <View style={[styles.summaryCell, styles.summaryCellSticky]}>
-                <Text style={styles.summaryPlayerName} numberOfLines={1}>{player.display_name}</Text>
-              </View>
-              {chunk.map(h => {
-                const strokes = scores[h.id]?.[player.id];
-                const diff = strokes ? strokes - h.par : null;
-                const scoreStyle = getScoreStyle(diff);
-                const isUnplayable = players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null);
-                return (
-                  <View key={h.id} style={[styles.summaryCell, scoreStyle, isUnplayable && styles.unplayableSummaryCell]}>
-                    <Text style={[
-                      styles.summaryValue,
-                      scoreStyle.color ? { color: scoreStyle.color } : { color: '#FFF' }
-                    ]}>
-                      {isUnplayable ? 'X' : (strokes || '-')}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      ))}
-    </ScrollView>
-  );
-};
-
 const MapComponent = ({ hole, isRecording, playerPos, throwStart }: { 
   hole: Hole | null, 
   isRecording: boolean,
@@ -473,6 +337,7 @@ export function ActiveMatchScreen() {
   const [selectedThrowType, setSelectedThrowType] = useState<ThrowType | null>(null);
   const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
   const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
+  const [holeEvents, setHoleEvents] = useState<Record<string, number>>({});
   const [unplayableScoreSnapshots, setUnplayableScoreSnapshots] = useState<Record<string, Record<string, number | null | undefined>>>({});
   const isSchemaCacheMissing = (error: any, key: string) =>
     Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
@@ -565,14 +430,14 @@ export function ActiveMatchScreen() {
     if (!currentHole || !matchId) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || !user.id) return;
       
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .eq('auth_id', user.id)
         .single();
-      if (!profile) return;
+      if (!profile || !profile.id) return;
 
       let data: any[] | null = null;
       const withThrowType = await supabase
@@ -626,11 +491,44 @@ export function ActiveMatchScreen() {
         discs: t.discs as { name: string; color_rgba: string } | null,
       }));
       
-      setRecordedThrows(formattedData);
-    } catch (error) {
-      console.error('Error fetching throws:', error);
-    }
-  };
+    setRecordedThrows(formattedData);
+    fetchEventsForHole();
+  } catch (error) {
+    console.error('Error fetching throws:', error);
+  }
+};
+
+const fetchEventsForHole = async () => {
+  if (!currentHole || !matchId) return;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !user.id) return;
+    
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('auth_id', user.id)
+      .single();
+    if (!profile || !profile.id) return;
+
+    const { data, error } = await supabase
+      .from('throw_events')
+      .select('event_type')
+      .eq('match_id', matchId)
+      .eq('hole_id', currentHole.id)
+      .eq('player_id', profile.id);
+
+    if (error) throw error;
+
+    const counts: Record<string, number> = {};
+    (data || []).forEach((e: any) => {
+      counts[e.event_type] = (counts[e.event_type] || 0) + 1;
+    });
+    setHoleEvents(counts);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+  }
+};
 
   useEffect(() => {
     if (holes.length > 0 && activeItem?.type === 'hole') {
@@ -640,6 +538,10 @@ export function ActiveMatchScreen() {
   }, [activeNavItemIndex, holes, matchId]);
 
   const fetchMatchData = async () => {
+    if (!layoutId || !matchId) {
+      console.warn('fetchMatchData called with empty layoutId or matchId');
+      return;
+    }
     try {
       setLoading(true);
       const { data: holeData, error: holeError } = await supabase
@@ -655,7 +557,7 @@ export function ActiveMatchScreen() {
         .from('match_players')
         .select(`
           player_id,
-          profiles ( id, display_name )
+          profiles ( id, display_name, avatar_url )
         `)
         .eq('match_id', matchId);
 
@@ -663,7 +565,8 @@ export function ActiveMatchScreen() {
       
       const mappedPlayers = (playerData || []).map((p: any) => ({
         id: p.profiles.id,
-        display_name: p.profiles.display_name
+        display_name: p.profiles.display_name,
+        avatar_url: p.profiles.avatar_url
       }));
       setPlayers(mappedPlayers);
 
@@ -688,13 +591,13 @@ export function ActiveMatchScreen() {
   const fetchDiscs = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || !user.id) return;
       const { data: profile } = await supabase
         .from('profiles')
         .select('id')
         .eq('auth_id', user.id)
         .single();
-      if (!profile) return;
+      if (!profile || !profile.id) return;
 
       const { data } = await supabase
         .from('discs')
@@ -816,19 +719,52 @@ export function ActiveMatchScreen() {
       const { data: profile } = await supabase.from('profiles').select('id').eq('auth_id', user.id).single();
       if (!profile) return;
 
-      const { error } = await supabase
-        .from('throw_events')
-        .insert({
-          match_id: matchId,
-          player_id: profile.id,
-          hole_id: currentHole.id,
-          event_type: eventType,
-        });
+      const currentCount = holeEvents[eventType] || 0;
 
-      if (error) {
-        if (!isSchemaCacheMissing(error, 'throw_event')) throw error;
+      if (currentCount > 0) {
+        // Toggle off: Delete ONE event of this type
+        const { data: existingEvents } = await supabase
+          .from('throw_events')
+          .select('id')
+          .eq('match_id', matchId)
+          .eq('player_id', profile.id)
+          .eq('hole_id', currentHole.id)
+          .eq('event_type', eventType)
+          .limit(1);
+
+        if (existingEvents && existingEvents.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('throw_events')
+            .delete()
+            .eq('id', existingEvents[0].id);
+          
+          if (deleteError) throw deleteError;
+          
+          setHoleEvents(prev => ({
+            ...prev,
+            [eventType]: Math.max(0, (prev[eventType] || 1) - 1)
+          }));
+        }
+      } else {
+        // Toggle on: Add event
+        const { error } = await supabase
+          .from('throw_events')
+          .insert({
+            match_id: matchId,
+            player_id: profile.id,
+            hole_id: currentHole.id,
+            event_type: eventType,
+          });
+
+        if (error) {
+          if (!isSchemaCacheMissing(error, 'throw_event')) throw error;
+        }
+
+        setHoleEvents(prev => ({
+          ...prev,
+          [eventType]: (prev[eventType] || 0) + 1
+        }));
       }
-      setIsEventActionsVisible(false);
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
@@ -974,32 +910,60 @@ export function ActiveMatchScreen() {
             {isEventActionsVisible && (
               <View style={styles.throwEventActions}>
                 <TouchableOpacity
-                  style={styles.throwEventAction}
+                  style={[styles.throwEventAction, (holeEvents['tree'] || 0) > 0 && { backgroundColor: '#2E7D32' }]}
                   accessibilityLabel="Record tree event"
                   onPress={() => recordThrowEvent('tree')}
                 >
-                  <MaterialCommunityIcons name="tree" size={18} color="#2E7D32" />
+                  <MaterialCommunityIcons 
+                    name="tree" 
+                    size={18} 
+                    color={(holeEvents['tree'] || 0) > 0 ? '#FFF' : '#2E7D32'} 
+                  />
+                  {(holeEvents['tree'] || 0) > 1 && (
+                    <View style={styles.eventBadge}><Text style={styles.eventBadgeText}>{holeEvents['tree']}</Text></View>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.throwEventAction}
+                  style={[styles.throwEventAction, (holeEvents['water'] || 0) > 0 && { backgroundColor: '#1E88E5' }]}
                   accessibilityLabel="Record water event"
                   onPress={() => recordThrowEvent('water')}
                 >
-                  <MaterialCommunityIcons name="waves" size={18} color="#1E88E5" />
+                  <MaterialCommunityIcons 
+                    name="waves" 
+                    size={18} 
+                    color={(holeEvents['water'] || 0) > 0 ? '#FFF' : '#1E88E5'} 
+                  />
+                  {(holeEvents['water'] || 0) > 1 && (
+                    <View style={styles.eventBadge}><Text style={styles.eventBadgeText}>{holeEvents['water']}</Text></View>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.throwEventAction}
+                  style={[styles.throwEventAction, (holeEvents['ob'] || 0) > 0 && { backgroundColor: '#FF7043' }]}
                   accessibilityLabel="Record ob event"
                   onPress={() => recordThrowEvent('ob')}
                 >
-                  <MaterialCommunityIcons name="alert-octagon-outline" size={18} color="#FF7043" />
+                  <MaterialCommunityIcons 
+                    name="alert-octagon-outline" 
+                    size={18} 
+                    color={(holeEvents['ob'] || 0) > 0 ? '#FFF' : '#FF7043'} 
+                  />
+                  {(holeEvents['ob'] || 0) > 1 && (
+                    <View style={styles.eventBadge}><Text style={styles.eventBadgeText}>{holeEvents['ob']}</Text></View>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.throwEventAction}
+                  style={[styles.throwEventAction, (holeEvents['hit_person'] || 0) > 0 && { backgroundColor: '#EF5350' }]}
                   accessibilityLabel="Record hit person event"
                   onPress={() => recordThrowEvent('hit_person')}
                 >
-                  <MaterialCommunityIcons name="account-alert-outline" size={18} color="#EF5350" />
+                  <MaterialCommunityIcons 
+                    name="account-alert-outline" 
+                    size={18} 
+                    color={(holeEvents['hit_person'] || 0) > 0 ? '#FFF' : '#EF5350'} 
+                  />
+                  {(holeEvents['hit_person'] || 0) > 1 && (
+                    <View style={styles.eventBadge}><Text style={styles.eventBadgeText}>{holeEvents['hit_person']}</Text></View>
+                  )}
                 </TouchableOpacity>
               </View>
             )}
@@ -1014,9 +978,7 @@ export function ActiveMatchScreen() {
                 return (
                   <View key={player.id} style={[styles.playerRow, isHoleUnplayable && styles.unplayableRow]}>
                     <View style={styles.playerMain}>
-                      <View style={styles.playerAvatar}>
-                        <Text style={styles.avatarTextSmall}>{player.display_name[0]}</Text>
-                      </View>
+                      <Avatar userId={player.id} name={player.display_name} avatarUrl={player.avatar_url} size={40} />
                       <View style={styles.playerNameContainer}>
                         <Text style={styles.playerNameText}>{player.display_name}</Text>
                         {isHoleUnplayable ? (
@@ -1061,9 +1023,13 @@ export function ActiveMatchScreen() {
           </View>
         </>
       ) : activeItem?.type === 'summary' ? (
-        <View style={styles.summaryContent}>
-          <SummaryView holes={holes.slice(activeItem.start, activeItem.end + 1)} players={players} scores={scores} />
-        </View>
+        <ScrollView style={styles.summaryContent}>
+          <ScorecardView 
+            holes={holes.slice(activeItem.start, activeItem.end + 1)} 
+            players={players} 
+            scores={scores} 
+          />
+        </ScrollView>
       ) : null}
 
       <View style={styles.holeNav}>
@@ -1226,6 +1192,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  eventBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  eventBadgeText: {
+    color: '#000',
+    fontSize: 9,
+    fontWeight: '900',
   },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
   playerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
@@ -1324,7 +1309,6 @@ const styles = StyleSheet.create({
   discName: { color: '#FFF', fontSize: 16 },
   modalClose: { marginTop: 16, alignItems: 'center', paddingVertical: 12 },
   modalCloseText: { color: 'rgba(255,255,255,0.5)', fontSize: 15 },
-  avatarTextSmall: { color: '#90CAF9', fontSize: 13, fontWeight: '700' },
   // Summary Styles
   summaryContent: { flex: 1, backgroundColor: COLORS.background },
   summaryContainer: { flex: 1, padding: 16 },
@@ -1361,22 +1345,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     opacity: 0.5,
-  },
-  leaderboardAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(144, 202, 249, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(144, 202, 249, 0.2)',
-  },
-  leaderboardAvatarText: {
-    color: '#90CAF9',
-    fontSize: 16,
-    fontWeight: '700',
   },
   leaderboardInfo: {
     flex: 1,

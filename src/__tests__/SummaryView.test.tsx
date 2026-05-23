@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { SummaryView } from '../screens/ActiveMatchScreen';
+import { ScorecardView } from '../components/ScorecardView';
 import { StyleSheet } from 'react-native';
 
 jest.mock('@expo/vector-icons', () => ({
@@ -19,9 +19,7 @@ jest.mock('react-native-webview', () => {
   };
 });
 
-
-
-describe('SummaryView', () => {
+describe('ScorecardView', () => {
   it('scales cells proportionally without overflowing minWidth constraints', () => {
     const mockHoles = [
       { id: 'h1', hole_number: 1, par: 3 },
@@ -40,7 +38,7 @@ describe('SummaryView', () => {
     ] as any[];
 
     const { getByTestId } = render(
-      <SummaryView holes={mockHoles} players={mockPlayers} scores={{}} />
+      <ScorecardView holes={mockHoles} players={mockPlayers} scores={{}} showLeaderboard={false} />
     );
 
     const stickyCell = getByTestId('summary-cell-sticky');
@@ -72,7 +70,7 @@ describe('SummaryView', () => {
     };
 
     const { getByTestId, getAllByText } = render(
-      <SummaryView holes={mockHoles} players={mockPlayers} scores={mockScores} />
+      <ScorecardView holes={mockHoles} players={mockPlayers} scores={mockScores} showLeaderboard={false} />
     );
 
     const holeHeaderCell = getByTestId('summary-cell-hole-h1');

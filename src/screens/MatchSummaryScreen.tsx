@@ -19,9 +19,13 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SUPPORT_CTA, SUPPORT_MESSAGE, SUPPORT_URL } from '../constants/support';
 
+import { Avatar } from '../components/Avatar';
+import { ScorecardView } from '../components/ScorecardView';
+
 interface PlayerScore {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
   total_strokes: number;
   total_par: number;
 }
@@ -46,6 +50,7 @@ const buildPlayerScores = (playerData: any[], scoresData: any[]): PlayerScore[] 
     return {
       id: p.player_id,
       display_name: p.profiles.display_name,
+      avatar_url: p.profiles.avatar_url,
       total_strokes: totalStrokes,
       total_par: totalPar,
     };
@@ -195,7 +200,8 @@ export function MatchSummaryScreen() {
         .select(`
           player_id,
           profiles (
-            display_name
+            display_name,
+            avatar_url
           )
         `)
         .eq('match_id', summaryMatchId);
@@ -323,6 +329,9 @@ export function MatchSummaryScreen() {
                   <Text style={styles.rankText}>{index + 1}</Text>
                 )}
               </View>
+              <View style={styles.avatarWrapper}>
+                <Avatar userId={player.id} name={player.display_name} avatarUrl={player.avatar_url} size={40} />
+              </View>
               <Text style={styles.playerName}>{player.display_name}</Text>
               <View style={styles.scoreContainer}>
                 <Text style={styles.totalStrokes}>{player.total_strokes}</Text>
@@ -345,6 +354,15 @@ export function MatchSummaryScreen() {
             </View>
           );
         })}
+
+        <View style={styles.scorecardWrapper}>
+          <ScorecardView 
+            holes={holesData} 
+            players={playerScores} 
+            scores={scoresMap} 
+            showLeaderboard={false} 
+          />
+        </View>
 
         {possibleScores.length > 0 && (
           <View style={styles.possibleScoreSection}>
@@ -496,6 +514,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  avatarWrapper: {
+    marginRight: 12,
+  },
   playerName: {
     flex: 1,
     fontSize: 18,
@@ -529,6 +550,9 @@ const styles = StyleSheet.create({
   scoreOverText: { color: '#FF5252' },
   scoreEvenBg: { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
   scoreEvenText: { color: COLORS.textSecondary },
+  scorecardWrapper: {
+    marginTop: 24,
+  },
   possibleScoreSection: {
     marginTop: 24,
     backgroundColor: COLORS.surface,

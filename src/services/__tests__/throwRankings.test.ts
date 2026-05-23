@@ -34,15 +34,15 @@ const rows: ThrowRankingRow[] = [
 describe('throwRankings', () => {
   it('builds longest putt rankings from measured putt throws', () => {
     expect(buildLongestPuttRankings(rows)).toEqual([
-      { id: 'p1', display_name: 'Alice', value: '21m', subValue: 'Putter' },
-      { id: 'p2', display_name: 'Bob', value: '18m', subValue: 'Putter' },
+      { id: 'p1', display_name: 'Alice', value: '21m', subValue: 'Putter', avatar_url: null },
+      { id: 'p2', display_name: 'Bob', value: '18m', subValue: 'Putter', avatar_url: null },
     ]);
   });
 
   it('builds longest throw rankings from shot and legacy untyped throws', () => {
     expect(buildLongestThrowRankings(rows)).toEqual([
-      { id: 'p1', display_name: 'Alice', value: '40m', subValue: 'Driver' },
-      { id: 'p2', display_name: 'Bob', value: '29m', subValue: 'Fairway' },
+      { id: 'p1', display_name: 'Alice', value: '40m', subValue: 'Driver', avatar_url: null },
+      { id: 'p2', display_name: 'Bob', value: '29m', subValue: 'Fairway', avatar_url: null },
     ]);
   });
 });

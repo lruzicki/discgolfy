@@ -23,8 +23,38 @@ jest.mock('../lib/supabase', () => ({
     auth: {
       signInWithPassword: jest.fn(),
       signUp: jest.fn(),
-      getUser: jest.fn(),
+      getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'user123', email: 'test@example.com' } }, error: null })),
     },
+    from: jest.fn((table) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ 
+                data: { id: 'p123', display_name: 'Lucas', avatar_url: null }, 
+                error: null 
+              })),
+            })),
+          })),
+        };
+      }
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              order: jest.fn(() => ({
+                limit: jest.fn(() => Promise.resolve({ data: [], error: null })),
+              })),
+              not: jest.fn(() => ({
+                order: jest.fn(() => Promise.resolve({ data: [], error: null })),
+              })),
+            })),
+            not: jest.fn(() => Promise.resolve({ data: [], error: null })),
+            order: jest.fn(() => Promise.resolve({ data: [], error: null })),
+          })),
+        })),
+      };
+    }),
   },
 }));
 

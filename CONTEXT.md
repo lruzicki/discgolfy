@@ -22,7 +22,7 @@ A mobile application for tracking disc golf scores and statistics. The app is a 
 ## 4. Database Schema (PostgreSQL via Supabase)
 All tables use `uuid` (via `gen_random_uuid()`) as their Primary Key (PK).
 
-- **`profiles`**: `id`, `auth_id` (nullable), `display_name`, `first_name`, `avatar_url`, `is_guest` (boolean), `created_at`.
+- **`profiles`**: `id`, `auth_id` (nullable), `display_name`, `first_name`, `avatar_url` (stores local identifier like `icon:cat:orange`), `is_guest` (boolean), `created_at`.
 - **`discs`**: `id`, `player_id` (FK), `name`, `color_rgba`, `speed`, `glide`, `turn`, `fade`, `weight_g`, `max_throw_m`, `max_putt_m`, `archived_at` (timestamp, nullable), `created_at`.
 - **`courses`**: `id`, `name`, `location`, `created_at`.
 - **`layouts`**: `id`, `course_id` (FK), `name`, `hole_count`.

@@ -3,12 +3,14 @@ import { View, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../theme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { Avatar } from './Avatar';
+
 interface PlayerRanking {
   id: string;
   display_name: string;
-  avg_diff: number;
-  rounds_played: number;
-  best_score: number;
+  avatar_url?: string | null;
+  value: number | string;
+  subValue?: string;
 }
 
 interface PodiumViewProps {
@@ -32,9 +34,7 @@ export const PodiumView: React.FC<PodiumViewProps> = ({ players }) => {
       <View key={player.id} style={styles.podiumColumn} testID={`podium-item-${player.index}`}>
         <View style={styles.playerInfo}>
           <View style={[styles.avatarContainer, isFirst && styles.firstAvatar]}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{player.display_name.charAt(0).toUpperCase()}</Text>
-            </View>
+            <Avatar userId={player.id} name={player.display_name} avatarUrl={player.avatar_url} size={isFirst ? 60 : 50} />
             {isFirst && (
               <View style={styles.crown}>
                 <MaterialCommunityIcons name="crown" size={24} color="#FFD700" />
@@ -93,21 +93,6 @@ const styles = StyleSheet.create({
   },
   firstAvatar: {
     transform: [{ scale: 1.2 }],
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.surfaceLight,
-    borderWidth: 2,
-    borderColor: COLORS.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '800',
   },
   crown: {
     position: 'absolute',

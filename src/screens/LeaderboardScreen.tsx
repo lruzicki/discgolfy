@@ -15,10 +15,12 @@ import { supabase } from '../lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PodiumView } from '../components/PodiumView';
 import { buildLongestPuttRankings, buildLongestThrowRankings } from '../services/throwRankings';
+import { Avatar } from '../components/Avatar';
 
 interface PlayerRanking {
   id: string;
   display_name: string;
+  avatar_url?: string | null;
   value: number | string;
   subValue?: string;
 }
@@ -73,7 +75,7 @@ export function LeaderboardScreen() {
       .select(`
         player_id,
         total_score,
-        profiles ( display_name ),
+        profiles ( display_name, avatar_url ),
         matches!inner (
           status,
           layout_id,
@@ -101,6 +103,7 @@ export function LeaderboardScreen() {
     const playerMap: Record<string, { 
       id: string, 
       name: string, 
+      avatar_url: string | null,
       totalDiff: number, 
       count: number,
       bestDiff: number,
@@ -124,6 +127,7 @@ export function LeaderboardScreen() {
         playerMap[playerId] = {
           id: playerId,
           name: entry.profiles?.display_name || 'Guest',
+          avatar_url: entry.profiles?.avatar_url || null,
           totalDiff: 0,
           count: 0,
           bestDiff: Infinity,
@@ -160,8 +164,9 @@ export function LeaderboardScreen() {
       return {
         id: p.id,
         display_name: p.name,
-        value,
-        subValue
+        avatar_url: p.avatar_url,
+        value: value,
+        subValue: subValue
       };
     });
 
@@ -182,7 +187,7 @@ export function LeaderboardScreen() {
         player_id,
         distance_m,
         throw_type,
-        profiles ( display_name ),
+        profiles ( display_name, avatar_url ),
         discs ( name ),
         matches!inner (
           status,
@@ -210,7 +215,7 @@ export function LeaderboardScreen() {
         player_id,
         distance_m,
         throw_type,
-        profiles ( display_name ),
+        profiles ( display_name, avatar_url ),
         discs ( name ),
         matches!inner (
           status,
@@ -245,6 +250,9 @@ export function LeaderboardScreen() {
       <View style={styles.rankRow}>
         <View style={styles.rankIndexContainer}>
           <Text style={styles.rankIndex}>{actualRank}</Text>
+        </View>
+        <View style={styles.avatarWrapper}>
+          <Avatar userId={item.id} name={item.display_name} avatarUrl={item.avatar_url} size={40} />
         </View>
         <View style={styles.rankPlayerInfo}>
           <Text style={styles.playerName}>{item.display_name}</Text>
@@ -505,6 +513,9 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 14,
     fontWeight: '800',
+  },
+  avatarWrapper: {
+    marginLeft: 8,
   },
   rankPlayerInfo: {
     flex: 1,

@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  Image,
   ScrollView,
   Modal,
 } from 'react-native';
@@ -19,6 +18,7 @@ import { supabase } from '../lib/supabase';
 import { useMatchStore } from '../store/useMatchStore';
 import { useNavigation } from '@react-navigation/native';
 import { PlayButton } from '../components/PlayButton';
+import { Avatar } from '../components/Avatar';
 
 interface Player {
   id: string;
@@ -54,7 +54,7 @@ export function SelectPlayersScreen() {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || !user.id) return;
 
       // 1. Fetch Current User Profile
       let { data: profile, error: profileError } = await supabase
@@ -66,7 +66,7 @@ export function SelectPlayersScreen() {
       if (profileError) throw profileError;
 
       // If no profile exists, create one (this handles cases where trigger didn't run or isn't set up)
-      if (!profile) {
+      if (!profile && user.id) {
         console.log('No profile found, creating one...');
         const { data: newProfile, error: insertError } = await supabase
           .from('profiles')
@@ -274,13 +274,7 @@ export function SelectPlayersScreen() {
         onPress={() => togglePlayer(item)}
       >
         <View style={styles.playerAvatarContainer}>
-          {item.avatar_url ? (
-            <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatarPlaceholder, isMe && styles.meAvatarPlaceholder]}>
-              <Text style={styles.avatarText}>{item.display_name[0]}</Text>
-            </View>
-          )}
+          <Avatar userId={item.id} name={item.display_name} avatarUrl={item.avatar_url} size={48} />
         </View>
 
         <View style={styles.playerInfo}>
@@ -348,9 +342,7 @@ export function SelectPlayersScreen() {
                     style={styles.selectedAvatar}
                     disabled={p.id === currentUserProfile?.id}
                   >
-                    <View style={[styles.avatarPlaceholderSmall, p.id === currentUserProfile?.id && { backgroundColor: COLORS.primary }]}>
-                      <Text style={styles.avatarTextSmall}>{p.display_name[0]}</Text>
-                    </View>
+                    <Avatar userId={p.id} name={p.display_name} avatarUrl={p.avatar_url} size={44} />
                     {p.id !== currentUserProfile?.id && (
                       <View style={styles.removeBadge}>
                         <Ionicons name="close" size={10} color="#FFF" />
@@ -528,40 +520,6 @@ const styles = StyleSheet.create({
   },
   playerAvatarContainer: {
     marginRight: 16,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  meAvatarPlaceholder: {
-    backgroundColor: COLORS.primary,
-  },
-  avatarPlaceholderSmall: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.borderDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  avatarTextSmall: {
-    color: COLORS.onPrimary,
-    fontSize: 18,
-    fontWeight: '700',
   },
   playerInfo: {
     flex: 1,
