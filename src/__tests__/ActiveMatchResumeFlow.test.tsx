@@ -504,4 +504,130 @@ describe('Active Match resume guard', () => {
       });
     });
   });
+
+  it('starts throw measurement without showing a success alert', async () => {
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+    (Location.getCurrentPositionAsync as jest.Mock).mockResolvedValue({
+      coords: { latitude: 54.1, longitude: 18.1 },
+    });
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores' || table === 'throws') {
+        return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'discs') {
+        return mockEqChain({ data: [{ id: 'disc-1', name: 'Driver', color_rgba: '#fff' }], error: null });
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.UNSAFE_getByProps({ name: 'ruler' }).parent?.parent);
+    });
+
+    expect(Alert.alert).not.toHaveBeenCalledWith(
+      'Measurement Started',
+      'Walk to your disc and tap the check icon.',
+    );
+    expect(screen.UNSAFE_getByProps({ name: 'stop-circle' })).toBeTruthy();
+  });
+
+  it('shows permission denied alert when measurement permission is not granted', async () => {
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'denied' });
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores' || table === 'throws') {
+        return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'discs') {
+        return mockEqChain({ data: [{ id: 'disc-1', name: 'Driver', color_rgba: '#fff' }], error: null });
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.UNSAFE_getByProps({ name: 'ruler' }).parent?.parent);
+    });
+
+    expect(Alert.alert).toHaveBeenCalledWith('Permission Denied', 'Location permission is required.');
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+  });
 });

@@ -678,7 +678,6 @@ export function ActiveMatchScreen() {
         startLat: location.coords.latitude,
         startLng: location.coords.longitude,
       });
-      Alert.alert('Measurement Started', 'Walk to your disc and tap the check icon.');
     } catch (error: any) {
       Alert.alert('Error', error.message);
     }
