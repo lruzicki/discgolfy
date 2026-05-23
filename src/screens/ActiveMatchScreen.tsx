@@ -21,6 +21,7 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../lib/utils';
 import { ThrowEventType } from '../constants/throwEvents';
+import { ThrowType } from '../constants/throwTypes';
 
 interface Player {
   id: string;
@@ -54,6 +55,7 @@ interface ThrowRecord {
   throw_number: number;
   distance_m: number;
   disc_id: string | null;
+  throw_type?: ThrowType | null;
   discs?: {
     name: string;
     color_rgba: string;
@@ -468,6 +470,7 @@ export function ActiveMatchScreen() {
   const [recordedThrows, setRecordedThrows] = useState<ThrowRecord[]>([]);
   const [activeNavItemIndex, setActiveNavItemIndex] = useState(0);
   const [isThrowHistoryVisible, setIsThrowHistoryVisible] = useState(false);
+  const [selectedThrowType, setSelectedThrowType] = useState<ThrowType | null>(null);
   const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
   const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
 
@@ -574,6 +577,7 @@ export function ActiveMatchScreen() {
           id,
           throw_number,
           distance_m,
+          throw_type,
           disc_id,
           discs (
             name,
@@ -591,6 +595,7 @@ export function ActiveMatchScreen() {
         id: t.id,
         throw_number: t.throw_number,
         distance_m: t.distance_m,
+        throw_type: t.throw_type,
         disc_id: t.disc_id,
         discs: t.discs as { name: string; color_rgba: string } | null,
       }));
@@ -701,6 +706,7 @@ export function ActiveMatchScreen() {
         lat: location.coords.latitude,
         lng: location.coords.longitude,
       });
+      setSelectedThrowType(null);
       setIsDiscModalVisible(true);
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -709,6 +715,10 @@ export function ActiveMatchScreen() {
 
   const recordMeasuredThrow = async (discId: string | null) => {
     if (!pendingThrow || !tempEndCoords || !currentHole) return;
+    if (!selectedThrowType) {
+      Alert.alert('Throw Type Required', 'Choose Shot or Putt before saving.');
+      return;
+    }
     try {
       const distance = calculateDistance(
         pendingThrow.startLat, pendingThrow.startLng,
@@ -741,11 +751,13 @@ export function ActiveMatchScreen() {
           end_lat: tempEndCoords.lat,
           end_lng: tempEndCoords.lng,
           distance_m: distance,
+          throw_type: selectedThrowType,
         });
 
       if (error) throw error;
       setPendingThrow(null);
       setTempEndCoords(null);
+      setSelectedThrowType(null);
       setIsDiscModalVisible(false);
       fetchThrowsForHole();
     } catch (error: any) {
@@ -1034,6 +1046,7 @@ export function ActiveMatchScreen() {
                     <Text style={styles.historyDiscName}>
                       {item.discs?.name || 'Unknown Disc'}
                     </Text>
+                    <Text style={styles.historyThrowType}>{(item.throw_type || 'shot').toUpperCase()}</Text>
                     {item.discs?.color_rgba && (
                       <View style={[styles.historyDiscColor, { backgroundColor: item.discs.color_rgba }]} />
                     )}
@@ -1057,11 +1070,26 @@ export function ActiveMatchScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Disc</Text>
+            <View style={styles.throwTypeSelector}>
+              <TouchableOpacity
+                style={[styles.throwTypeOption, selectedThrowType === 'shot' && styles.throwTypeOptionActive]}
+                onPress={() => setSelectedThrowType('shot')}
+              >
+                <Text style={[styles.throwTypeOptionText, selectedThrowType === 'shot' && styles.throwTypeOptionTextActive]}>Shot</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.throwTypeOption, selectedThrowType === 'putt' && styles.throwTypeOptionActive]}
+                onPress={() => setSelectedThrowType('putt')}
+              >
+                <Text style={[styles.throwTypeOptionText, selectedThrowType === 'putt' && styles.throwTypeOptionTextActive]}>Putt</Text>
+              </TouchableOpacity>
+            </View>
+            {!selectedThrowType && <Text style={styles.throwTypeHint}>Select throw type to enable save.</Text>}
             <FlatList
               data={discs}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.discItem} onPress={() => recordMeasuredThrow(item.id)}>
+                <TouchableOpacity style={[styles.discItem, !selectedThrowType && styles.discItemDisabled]} disabled={!selectedThrowType} onPress={() => recordMeasuredThrow(item.id)}>
                   <View style={[styles.discColor, { backgroundColor: item.color_rgba || COLORS.primary }]} />
                   <Text style={styles.discName}>{item.name}</Text>
                 </TouchableOpacity>
@@ -1087,14 +1115,17 @@ export function ActiveMatchScreen() {
                     </View>
                     <Text style={[styles.discName, { color: COLORS.primary, fontWeight: '700' }]}>Add New Disc</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.discItem} onPress={() => recordMeasuredThrow(null)}>
+                  <TouchableOpacity style={[styles.discItem, !selectedThrowType && styles.discItemDisabled]} disabled={!selectedThrowType} onPress={() => recordMeasuredThrow(null)}>
                     <View style={[styles.discColor, { backgroundColor: '#555' }]} />
                     <Text style={styles.discName}>Unknown Disc</Text>
                   </TouchableOpacity>
                 </>
               }
             />
-            <TouchableOpacity style={styles.modalClose} onPress={() => setIsDiscModalVisible(false)}>
+            <TouchableOpacity style={styles.modalClose} onPress={() => {
+              setSelectedThrowType(null);
+              setIsDiscModalVisible(false);
+            }}>
               <Text style={styles.modalCloseText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1161,6 +1192,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   modalTitle: { color: '#FFF', fontSize: 19, fontWeight: '600' },
   modalSubTitle: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 20 },
+  throwTypeSelector: { flexDirection: 'row', gap: 10, marginTop: 12, marginBottom: 8 },
+  throwTypeOption: { flex: 1, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 10, alignItems: 'center' },
+  throwTypeOptionActive: { borderColor: COLORS.primary, backgroundColor: 'rgba(33,150,243,0.2)' },
+  throwTypeOptionText: { color: COLORS.textSecondary, fontWeight: '600' },
+  throwTypeOptionTextActive: { color: COLORS.onPrimary },
+  throwTypeHint: { color: COLORS.textSecondary, fontSize: 12, marginBottom: 8 },
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1193,6 +1230,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
+  historyThrowType: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   historyDiscColor: {
     width: 8,
     height: 8,
@@ -1214,6 +1256,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   discItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  discItemDisabled: { opacity: 0.45 },
   discColor: { width: 18, height: 18, borderRadius: 9, marginRight: 12 },
   discName: { color: '#FFF', fontSize: 16 },
   modalClose: { marginTop: 16, alignItems: 'center', paddingVertical: 12 },

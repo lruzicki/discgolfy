@@ -14,6 +14,7 @@ import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PodiumView } from '../components/PodiumView';
+import { buildLongestPuttRankings, buildLongestThrowRankings } from '../services/throwRankings';
 
 interface PlayerRanking {
   id: string;
@@ -180,6 +181,7 @@ export function LeaderboardScreen() {
       .select(`
         player_id,
         distance_m,
+        throw_type,
         profiles ( display_name ),
         discs ( name ),
         matches!inner (
@@ -198,68 +200,36 @@ export function LeaderboardScreen() {
     const { data, error } = await query;
     if (error) throw error;
 
-    const playerMax: Record<string, any> = {};
-    (data || []).forEach((t: any) => {
-      if (!playerMax[t.player_id] || t.distance_m > playerMax[t.player_id].distance_m) {
-        playerMax[t.player_id] = {
-          id: t.player_id,
-          display_name: t.profiles?.display_name || 'Unknown',
-          distance_m: t.distance_m,
-          disc_name: t.discs?.name || 'Unknown Disc'
-        };
-      }
-    });
-
-    const result: PlayerRanking[] = Object.values(playerMax)
-      .map(p => ({
-        id: p.id,
-        display_name: p.display_name,
-        value: `${p.distance_m}m`,
-        subValue: p.disc_name
-      }))
-      .sort((a, b) => parseInt(b.value as string) - parseInt(a.value as string))
-      .slice(0, 20);
-
-    setRankings(result);
+    setRankings(buildLongestThrowRankings(data || []));
   };
 
   const fetchPuttRankings = async () => {
-    // Rankings for putts - since we don't have a specific 'putt' flag, 
-    // we use the max_putt_m from discs as a proxy for player's best putt achievement
-    const { data, error } = await supabase
-      .from('discs')
+    let query = supabase
+      .from('throws')
       .select(`
         player_id,
-        max_putt_m,
-        profiles!inner ( display_name )
+        distance_m,
+        throw_type,
+        profiles ( display_name ),
+        discs ( name ),
+        matches!inner (
+          status,
+          layout_id,
+          layouts!inner ( course_id )
+        )
       `)
-      .not('max_putt_m', 'is', null)
-      .order('max_putt_m', { ascending: false });
+      .eq('matches.status', 'completed')
+      .eq('throw_type', 'putt')
+      .not('distance_m', 'is', null);
 
+    if (selectedCourse) {
+      query = query.eq('matches.layouts.course_id', selectedCourse);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
 
-    const playerMax: Record<string, any> = {};
-    (data || []).forEach((d: any) => {
-      if (!playerMax[d.player_id] || d.max_putt_m > playerMax[d.player_id].max_putt_m) {
-        playerMax[d.player_id] = {
-          id: d.player_id,
-          display_name: d.profiles?.display_name || 'Unknown',
-          max_putt_m: d.max_putt_m
-        };
-      }
-    });
-
-    const result: PlayerRanking[] = Object.values(playerMax)
-      .map(p => ({
-        id: p.id,
-        display_name: p.display_name,
-        value: `${p.max_putt_m}m`,
-        subValue: 'Personal Best'
-      }))
-      .sort((a, b) => parseInt(b.value as string) - parseInt(a.value as string))
-      .slice(0, 20);
-
-    setRankings(result);
+    setRankings(buildLongestPuttRankings(data || []));
   };
 
   const onRefresh = () => {
