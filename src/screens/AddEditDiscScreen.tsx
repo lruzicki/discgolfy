@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -35,6 +35,38 @@ const PRESET_COLORS = [
   '#FFFFFF', '#A0A0A0', '#424242', '#000000'
 ];
 
+interface InputFieldProps {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  keyboardType?: 'default' | 'numeric';
+  placeholder?: string;
+  containerStyle?: any;
+}
+
+const InputField = React.memo(function InputField({
+  label,
+  value,
+  onChangeText,
+  keyboardType = 'default',
+  placeholder,
+  containerStyle,
+}: InputFieldProps) {
+  return (
+    <View style={[styles.inputContainer, containerStyle]}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.textMuted}
+      />
+    </View>
+  );
+});
+
 export function AddEditDiscScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -55,6 +87,10 @@ export function AddEditDiscScreen() {
   });
 
   const [saving, setSaving] = useState(false);
+
+  const updateField = useCallback((field: keyof DiscForm, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
   const handleSave = async () => {
     if (!form.name) {
@@ -150,20 +186,6 @@ export function AddEditDiscScreen() {
     );
   };
 
-  const InputField = ({ label, value, onChangeText, keyboardType = 'default', placeholder, containerStyle }: any) => (
-    <View style={[styles.inputContainer, containerStyle]}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        placeholder={placeholder}
-        placeholderTextColor={COLORS.textMuted}
-      />
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -184,7 +206,7 @@ export function AddEditDiscScreen() {
         <InputField
           label="Disc Name"
           value={form.name}
-          onChangeText={(text: string) => setForm({ ...form, name: text })}
+          onChangeText={(text: string) => updateField('name', text)}
           placeholder="e.g. Destroyer"
         />
 
@@ -210,14 +232,14 @@ export function AddEditDiscScreen() {
           <InputField
             label="Speed"
             value={form.speed}
-            onChangeText={(text: string) => setForm({ ...form, speed: text })}
+            onChangeText={(text: string) => updateField('speed', text)}
             keyboardType="numeric"
             containerStyle={{ flex: 1 }}
           />
           <InputField
             label="Glide"
             value={form.glide}
-            onChangeText={(text: string) => setForm({ ...form, glide: text })}
+            onChangeText={(text: string) => updateField('glide', text)}
             keyboardType="numeric"
             containerStyle={{ flex: 1 }}
           />
@@ -227,14 +249,14 @@ export function AddEditDiscScreen() {
           <InputField
             label="Turn"
             value={form.turn}
-            onChangeText={(text: string) => setForm({ ...form, turn: text })}
+            onChangeText={(text: string) => updateField('turn', text)}
             keyboardType="numeric"
             containerStyle={{ flex: 1 }}
           />
           <InputField
             label="Fade"
             value={form.fade}
-            onChangeText={(text: string) => setForm({ ...form, fade: text })}
+            onChangeText={(text: string) => updateField('fade', text)}
             keyboardType="numeric"
             containerStyle={{ flex: 1 }}
           />
@@ -243,7 +265,7 @@ export function AddEditDiscScreen() {
         <InputField
           label="Weight (g)"
           value={form.weight_g}
-          onChangeText={(text: string) => setForm({ ...form, weight_g: text })}
+          onChangeText={(text: string) => updateField('weight_g', text)}
           keyboardType="numeric"
         />
 
@@ -252,13 +274,13 @@ export function AddEditDiscScreen() {
           <InputField
             label="Max Throw (m)"
             value={form.max_throw_m}
-            onChangeText={(text: string) => setForm({ ...form, max_throw_m: text })}
+            onChangeText={(text: string) => updateField('max_throw_m', text)}
             keyboardType="numeric"
           />
           <InputField
             label="Max Putt (m)"
             value={form.max_putt_m}
-            onChangeText={(text: string) => setForm({ ...form, max_putt_m: text })}
+            onChangeText={(text: string) => updateField('max_putt_m', text)}
             keyboardType="numeric"
           />
         </View>
