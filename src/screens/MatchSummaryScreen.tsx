@@ -26,8 +26,9 @@ export function MatchSummaryScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { matchId, resetMatch } = useMatchStore();
-  const summaryMatchId = route.params?.matchId || matchId;
-  const isViewingHistorical = !!route.params?.matchId;
+  const routeMatchId = route.params?.matchId;
+  const summaryMatchId = routeMatchId ?? matchId;
+  const isViewingHistorical = routeMatchId != null;
   const [loading, setLoading] = useState(true);
   const [playerScores, setPlayerScores] = useState<PlayerScore[]>([]);
   const [courseInfo, setCourseInfo] = useState<any>(null);
