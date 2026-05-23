@@ -17,6 +17,7 @@ export function EditProfileScreen({ navigation }: any) {
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [newAvatarUri, setNewAvatarUri] = useState<string | null>(null);
+  const [newAvatarFileSizeBytes, setNewAvatarFileSizeBytes] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     fetchProfile();
@@ -58,7 +59,7 @@ export function EditProfileScreen({ navigation }: any) {
       
       let finalAvatarUrl = avatarUrl;
       if (newAvatarUri) {
-        const uploadResult = await profileService.uploadAvatar(profileId, newAvatarUri);
+        const uploadResult = await profileService.uploadAvatar(profileId, newAvatarUri, newAvatarFileSizeBytes);
         if (uploadResult.success) {
           finalAvatarUrl = uploadResult.publicUrl || avatarUrl;
         } else {
@@ -125,6 +126,7 @@ export function EditProfileScreen({ navigation }: any) {
       }
 
       setNewAvatarUri(asset.uri);
+      setNewAvatarFileSizeBytes(asset.fileSize);
       setAvatarUrl(asset.uri);
     }
   };

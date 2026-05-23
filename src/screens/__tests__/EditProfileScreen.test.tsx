@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { EditProfileScreen } from '../EditProfileScreen';
 import { profileService } from '../../services/profileService';
@@ -38,8 +39,14 @@ const mockNavigation = {
 };
 
 describe('EditProfileScreen', () => {
+  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  afterAll(() => {
+    alertSpy.mockRestore();
   });
 
   it('renders correctly and fetches profile data', async () => {
@@ -110,11 +117,68 @@ describe('EditProfileScreen', () => {
     fireEvent.press(saveButton);
 
     await waitFor(() => {
-      expect(profileService.uploadAvatar).toHaveBeenCalledWith('profile-id', 'file://new-avatar.jpg');
+      expect(profileService.uploadAvatar).toHaveBeenCalledWith('profile-id', 'file://new-avatar.jpg', undefined);
     });
 
     expect(profileService.updateProfile).toHaveBeenCalledWith('profile-id', expect.objectContaining({
       avatar_url: 'https://supabase.com/avatar.jpg'
     }));
+  });
+
+  it('rejects oversized selected image and does not upload', async () => {
+    const ImagePicker = require('expo-image-picker');
+    ImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file://too-large.jpg', fileSize: 5 * 1024 * 1024 + 1 }]
+    });
+
+    (profileService.updateProfile as jest.Mock).mockResolvedValue({ success: true });
+
+    const { getByTestId, getByText, getByDisplayValue } = render(
+      <EditProfileScreen navigation={mockNavigation} />
+    );
+
+    await waitFor(() => getByDisplayValue('Test User'));
+    fireEvent.press(getByTestId('avatar-touchable'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Image too large', 'Please select an image smaller than 5MB');
+    });
+
+    fireEvent.press(getByText('Save Changes'));
+
+    expect(profileService.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('stays on edit screen and shows error when upload fails', async () => {
+    const ImagePicker = require('expo-image-picker');
+    ImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file://new-avatar.jpg', fileSize: 1000 }]
+    });
+
+    (profileService.uploadAvatar as jest.Mock).mockResolvedValue({
+      success: false,
+      error: 'Upload failed'
+    });
+
+    const { getByTestId, getByText, getByDisplayValue } = render(
+      <EditProfileScreen navigation={mockNavigation} />
+    );
+
+    await waitFor(() => getByDisplayValue('Test User'));
+    fireEvent.press(getByTestId('avatar-touchable'));
+
+    await waitFor(() => {
+      expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
+    });
+
+    fireEvent.press(getByText('Save Changes'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Error', 'Upload failed');
+    });
+
+    expect(mockNavigation.goBack).not.toHaveBeenCalled();
   });
 });

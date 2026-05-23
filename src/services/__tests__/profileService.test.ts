@@ -19,8 +19,18 @@ jest.mock('../../lib/supabase', () => ({
 }));
 
 describe('profileService', () => {
+  const originalFetch = global.fetch;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['small-image-bytes'], { type: 'image/jpeg' }),
+    } as any);
+  });
+
+  afterAll(() => {
+    global.fetch = originalFetch;
   });
 
   describe('updateProfile', () => {
@@ -57,10 +67,27 @@ describe('profileService', () => {
       const result = await profileService.uploadAvatar(profileId, fileUri);
 
       expect(supabase.storage.from).toHaveBeenCalledWith('avatars');
-      expect(supabase.storage.from('avatars').upload).toHaveBeenCalled();
+      expect(supabase.storage.from('avatars').upload).toHaveBeenCalledWith(
+        expect.stringContaining('avatars/test-id-'),
+        expect.any(Blob),
+        expect.objectContaining({ contentType: 'image/jpeg', upsert: true })
+      );
       expect(supabase.storage.from('avatars').getPublicUrl).toHaveBeenCalled();
       expect(result.success).toBe(true);
       expect(result.publicUrl).toBe('https://test.com/test.jpg');
+    });
+
+    it('rejects oversized image when picker size is unavailable and blob exceeds 5MB', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        blob: async () => new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: 'image/jpeg' }),
+      } as any);
+
+      const result = await profileService.uploadAvatar('id', 'file://large.jpg');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Please select an image smaller than 5MB');
+      expect(supabase.storage.from('avatars').upload).not.toHaveBeenCalled();
     });
 
     it('returns error when upload fails', async () => {
