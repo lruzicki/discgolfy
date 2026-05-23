@@ -59,50 +59,6 @@ describe('profileService', () => {
     });
   });
 
-  describe('uploadAvatar', () => {
-    it('uploads a file to Supabase Storage and returns the public URL', async () => {
-      const profileId = 'test-id';
-      const fileUri = 'file://path/to/image.jpg';
-      
-      const result = await profileService.uploadAvatar(profileId, fileUri);
-
-      expect(supabase.storage.from).toHaveBeenCalledWith('avatars');
-      expect(supabase.storage.from('avatars').upload).toHaveBeenCalledWith(
-        expect.stringContaining('avatars/test-id-'),
-        expect.any(Blob),
-        expect.objectContaining({ contentType: 'image/jpeg', upsert: true })
-      );
-      expect(supabase.storage.from('avatars').getPublicUrl).toHaveBeenCalled();
-      expect(result.success).toBe(true);
-      expect(result.publicUrl).toBe('https://test.com/test.jpg');
-    });
-
-    it('rejects oversized image when picker size is unavailable and blob exceeds 5MB', async () => {
-      global.fetch = jest.fn().mockResolvedValue({
-        ok: true,
-        blob: async () => new Blob([new Uint8Array(5 * 1024 * 1024 + 1)], { type: 'image/jpeg' }),
-      } as any);
-
-      const result = await profileService.uploadAvatar('id', 'file://large.jpg');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Please select an image smaller than 5MB');
-      expect(supabase.storage.from('avatars').upload).not.toHaveBeenCalled();
-    });
-
-    it('returns error when upload fails', async () => {
-      (supabase.storage.from('avatars').upload as jest.Mock).mockResolvedValueOnce({
-        data: null,
-        error: { message: 'Upload failed' }
-      });
-
-      const result = await profileService.uploadAvatar('id', 'uri');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Upload failed');
-    });
-  });
-
   describe('updateEmail', () => {
     it('calls supabase.auth.updateUser with the new email', async () => {
       const newEmail = 'new@example.com';

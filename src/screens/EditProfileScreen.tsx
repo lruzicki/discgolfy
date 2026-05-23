@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { profileService } from '../services/profileService';
-import * as ImagePicker from 'expo-image-picker';
+import { Avatar } from '../components/Avatar';
+
+const PRESET_ICONS = [
+  'paw', 'person', 'happy', 'star', 'planet', 'rocket', 'game-controller', 'football',
+  'bicycle', 'baseball', 'basketball', 'tennisball', 'golf', 'flash', 'flame'
+];
+
+const PRESET_COLORS = [
+  '#ef4444', '#f97316', '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'
+];
 
 export function EditProfileScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
@@ -16,8 +25,10 @@ export function EditProfileScreen({ navigation }: any) {
   const [newEmail, setNewEmail] = useState('');
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [newAvatarUri, setNewAvatarUri] = useState<string | null>(null);
-  const [newAvatarFileSizeBytes, setNewAvatarFileSizeBytes] = useState<number | undefined>(undefined);
+
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [selectedIcon, setSelectedIcon] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfile();
@@ -40,6 +51,12 @@ export function EditProfileScreen({ navigation }: any) {
         setProfileId(profile.id);
         setDisplayName(profile.display_name);
         setAvatarUrl(profile.avatar_url);
+        
+        if (profile.avatar_url && profile.avatar_url.startsWith('icon:')) {
+          const [, icon, color] = profile.avatar_url.split(':');
+          setSelectedIcon(icon);
+          setSelectedColor(color);
+        }
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -58,15 +75,8 @@ export function EditProfileScreen({ navigation }: any) {
       setSaving(true);
       
       let finalAvatarUrl = avatarUrl;
-      if (newAvatarUri) {
-        const uploadResult = await profileService.uploadAvatar(profileId, newAvatarUri, newAvatarFileSizeBytes);
-        if (uploadResult.success) {
-          finalAvatarUrl = uploadResult.publicUrl || avatarUrl;
-        } else {
-          Alert.alert('Error', uploadResult.error || 'Failed to upload avatar');
-          setSaving(false);
-          return;
-        }
+      if (selectedIcon && selectedColor) {
+        finalAvatarUrl = `icon:${selectedIcon}:${selectedColor}`;
       }
 
       const result = await profileService.updateProfile(profileId, {
@@ -108,28 +118,7 @@ export function EditProfileScreen({ navigation }: any) {
     }
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-
-    if (!result.canceled && result.assets && result.assets[0].uri) {
-      const asset = result.assets[0];
-      
-      // Check file size (5MB = 5 * 1024 * 1024 bytes)
-      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
-        Alert.alert('Image too large', 'Please select an image smaller than 5MB');
-        return;
-      }
-
-      setNewAvatarUri(asset.uri);
-      setNewAvatarFileSizeBytes(asset.fileSize);
-      setAvatarUrl(asset.uri);
-    }
-  };
+  const previewAvatarUrl = selectedIcon && selectedColor ? `icon:${selectedIcon}:${selectedColor}` : avatarUrl;
 
   if (loading) {
     return (
@@ -151,16 +140,49 @@ export function EditProfileScreen({ navigation }: any) {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={pickImage} testID="avatar-touchable">
-            <Image 
-              source={{ uri: avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop' }} 
-              style={styles.avatar} 
-            />
+          <TouchableOpacity onPress={() => setIsPickerOpen(!isPickerOpen)} testID="avatar-touchable">
+            <Avatar userId={profileId} name={displayName} avatarUrl={previewAvatarUrl} size={120} />
             <View style={styles.editBadge}>
-              <Ionicons name="camera" size={16} color="white" />
+              <Ionicons name="pencil" size={16} color="white" />
             </View>
           </TouchableOpacity>
         </View>
+
+        {isPickerOpen && (
+          <View style={styles.pickerContainer}>
+            <Text style={styles.pickerLabel}>SELECT ICON</Text>
+            <View style={styles.grid}>
+              {PRESET_ICONS.map((icon) => (
+                <TouchableOpacity
+                  key={icon}
+                  testID={`icon-preset-${icon}`}
+                  style={[styles.gridItem, selectedIcon === icon && styles.selectedGridItem]}
+                  onPress={() => setSelectedIcon(icon)}
+                >
+                  <Ionicons name={icon as any} size={24} color={selectedIcon === icon ? COLORS.primary : COLORS.text} />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[styles.pickerLabel, { marginTop: 16 }]}>SELECT COLOR</Text>
+            <View style={styles.colorGrid}>
+              {PRESET_COLORS.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  testID={`color-preset-${color}`}
+                  style={[
+                    styles.colorItem, 
+                    { backgroundColor: color },
+                    selectedColor === color && styles.selectedColorItem
+                  ]}
+                  onPress={() => setSelectedColor(color)}
+                >
+                  {selectedColor === color && <Ionicons name="checkmark" size={20} color="white" />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         <View style={styles.inputSection}>
           <Text style={styles.label}>DISPLAY NAME</Text>
@@ -243,13 +265,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 32,
   },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: COLORS.borderDark,
-  },
   editBadge: {
     position: 'absolute',
     bottom: 0,
@@ -262,6 +277,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     borderColor: COLORS.background,
+  },
+  pickerContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+  },
+  pickerLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 12,
+    letterSpacing: 1,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  gridItem: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  selectedGridItem: {
+    borderColor: COLORS.primary,
+    backgroundColor: `${COLORS.primary}20`,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  colorItem: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedColorItem: {
+    borderWidth: 3,
+    borderColor: COLORS.text,
   },
   inputSection: {
     marginBottom: 24,

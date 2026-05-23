@@ -84,18 +84,7 @@ describe('EditProfileScreen', () => {
     });
   });
 
-  it('picks an image and uploads it', async () => {
-    const mockPickResult = {
-      canceled: false,
-      assets: [{ uri: 'file://new-avatar.jpg' }]
-    };
-    const ImagePicker = require('expo-image-picker');
-    ImagePicker.launchImageLibraryAsync.mockResolvedValue(mockPickResult);
-    
-    (profileService.uploadAvatar as jest.Mock).mockResolvedValue({ 
-      success: true, 
-      publicUrl: 'https://supabase.com/avatar.jpg' 
-    });
+  it('picks a vector icon and color and saves formatted string', async () => {
     (profileService.updateProfile as jest.Mock).mockResolvedValue({ success: true });
 
     const { getByTestId, getByText, getByDisplayValue } = render(
@@ -103,82 +92,27 @@ describe('EditProfileScreen', () => {
     );
 
     await waitFor(() => getByDisplayValue('Test User'));
-    
+
+    // Open avatar selection (assuming tapping the avatar opens a modal or expands the picker)
     fireEvent.press(getByTestId('avatar-touchable'));
 
-    await waitFor(() => {
-      expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
-    });
+    // Select an icon from the grid
+    const iconCat = await waitFor(() => getByTestId('icon-preset-paw'));
+    fireEvent.press(iconCat);
 
-    // Small delay to ensure state update
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Select a color from the palette
+    const colorRed = getByTestId('color-preset-#ef4444');
+    fireEvent.press(colorRed);
 
+    // Save changes
     const saveButton = getByText('Save Changes');
     fireEvent.press(saveButton);
 
     await waitFor(() => {
-      expect(profileService.uploadAvatar).toHaveBeenCalledWith('profile-id', 'file://new-avatar.jpg', undefined);
+      expect(profileService.updateProfile).toHaveBeenCalledWith('profile-id', expect.objectContaining({
+        avatar_url: 'icon:paw:#ef4444'
+      }));
     });
-
-    expect(profileService.updateProfile).toHaveBeenCalledWith('profile-id', expect.objectContaining({
-      avatar_url: 'https://supabase.com/avatar.jpg'
-    }));
   });
 
-  it('rejects oversized selected image and does not upload', async () => {
-    const ImagePicker = require('expo-image-picker');
-    ImagePicker.launchImageLibraryAsync.mockResolvedValue({
-      canceled: false,
-      assets: [{ uri: 'file://too-large.jpg', fileSize: 5 * 1024 * 1024 + 1 }]
-    });
-
-    (profileService.updateProfile as jest.Mock).mockResolvedValue({ success: true });
-
-    const { getByTestId, getByText, getByDisplayValue } = render(
-      <EditProfileScreen navigation={mockNavigation} />
-    );
-
-    await waitFor(() => getByDisplayValue('Test User'));
-    fireEvent.press(getByTestId('avatar-touchable'));
-
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Image too large', 'Please select an image smaller than 5MB');
-    });
-
-    fireEvent.press(getByText('Save Changes'));
-
-    expect(profileService.uploadAvatar).not.toHaveBeenCalled();
-  });
-
-  it('stays on edit screen and shows error when upload fails', async () => {
-    const ImagePicker = require('expo-image-picker');
-    ImagePicker.launchImageLibraryAsync.mockResolvedValue({
-      canceled: false,
-      assets: [{ uri: 'file://new-avatar.jpg', fileSize: 1000 }]
-    });
-
-    (profileService.uploadAvatar as jest.Mock).mockResolvedValue({
-      success: false,
-      error: 'Upload failed'
-    });
-
-    const { getByTestId, getByText, getByDisplayValue } = render(
-      <EditProfileScreen navigation={mockNavigation} />
-    );
-
-    await waitFor(() => getByDisplayValue('Test User'));
-    fireEvent.press(getByTestId('avatar-touchable'));
-
-    await waitFor(() => {
-      expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
-    });
-
-    fireEvent.press(getByText('Save Changes'));
-
-    await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('Error', 'Upload failed');
-    });
-
-    expect(mockNavigation.goBack).not.toHaveBeenCalled();
-  });
 });

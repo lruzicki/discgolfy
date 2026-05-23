@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export interface AvatarProps {
   userId: string;
@@ -31,6 +32,26 @@ function getAvatarColor(userId: string): string {
 }
 
 export function Avatar({ userId, name, avatarUrl, size = 100 }: AvatarProps) {
+  if (avatarUrl && avatarUrl.startsWith('icon:')) {
+    const [, iconName, iconColor] = avatarUrl.split(':');
+    return (
+      <View
+        testID="avatar-container"
+        style={[
+          styles.container,
+          {
+            backgroundColor: iconColor,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }
+        ]}
+      >
+        <Ionicons name={iconName as any} size={size * 0.6} color="#ffffff" testID="avatar-icon" />
+      </View>
+    );
+  }
+
   if (avatarUrl) {
     return (
       <Image

@@ -2,6 +2,10 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { Avatar } from '../Avatar';
 
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: 'Ionicons',
+}));
+
 describe('Avatar Component', () => {
   it('displays the first letter of the name when avatarUrl is null', () => {
     const { getByText } = render(
@@ -47,6 +51,22 @@ describe('Avatar Component', () => {
 
     const image = getByTestId('avatar-image');
     expect(image.props.source.uri).toBe('https://example.com/avatar.jpg');
+    
+    // Should not render initials
+    expect(queryByText('A')).toBeNull();
+  });
+
+  it('renders a vector icon with background color when avatarUrl is an icon string', () => {
+    const { getByTestId, queryByText } = render(
+      <Avatar userId="123" name="Alice" avatarUrl="icon:paw:#FF5733" />
+    );
+
+    const container = getByTestId('avatar-container');
+    const style = container.props.style.find((s: any) => s && s.backgroundColor);
+    expect(style.backgroundColor).toBe('#FF5733');
+
+    const icon = getByTestId('avatar-icon');
+    expect(icon).toBeTruthy();
     
     // Should not render initials
     expect(queryByText('A')).toBeNull();
