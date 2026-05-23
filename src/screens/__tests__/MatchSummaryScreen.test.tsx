@@ -274,4 +274,192 @@ describe('MatchSummaryScreen', () => {
 
     expect(screen.queryByText('+4')).toBeNull();
   });
+
+  it('does not show Possible Score when no throw events were recorded', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-1',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 18,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { strokes: 3, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } },
+                { strokes: 4, player_id: 'player-2', hole_id: 'hole-1', holes: { par: 3 } },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { player_id: 'player-1', profiles: { display_name: 'Alice' } },
+                { player_id: 'player-2', profiles: { display_name: 'Bob' } },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'throw_events') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    useMatchStore.setState({ matchId: 'match-1' });
+
+    const screen = render(<MatchSummaryScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Final Results')).toBeTruthy();
+    });
+
+    expect(screen.queryByText('Possible Score')).toBeNull();
+  });
+
+  it('shows Possible Score when a player has throw events, including historical summaries', async () => {
+    mockRouteParams = { matchId: 'match-history-1' };
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-history-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-2',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 18,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { strokes: 6, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } },
+                { strokes: 5, player_id: 'player-2', hole_id: 'hole-1', holes: { par: 3 } },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { player_id: 'player-1', profiles: { display_name: 'Alice' } },
+                { player_id: 'player-2', profiles: { display_name: 'Bob' } },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'throw_events') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { player_id: 'player-1' },
+                { player_id: 'player-1' },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    const screen = render(<MatchSummaryScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Possible Score')).toBeTruthy();
+      expect(screen.getByText('Actual')).toBeTruthy();
+      expect(screen.getByText('Events')).toBeTruthy();
+      expect(screen.getByText('Adjusted')).toBeTruthy();
+      expect(screen.getByText('Adj Diff')).toBeTruthy();
+      expect(screen.getAllByText('6').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('2').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('4').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('+1').length).toBeGreaterThan(0);
+    });
+  });
 });

@@ -22,6 +22,37 @@ interface PlayerScore {
   total_par: number;
 }
 
+interface PossibleScoreRow {
+  id: string;
+  display_name: string;
+  actual_strokes: number;
+  event_count: number;
+  adjusted_strokes: number;
+  adjusted_diff: number;
+}
+
+const buildPlayerScores = (playerData: any[], scoresData: any[]): PlayerScore[] => {
+  return (playerData || []).map((p: any) => {
+    const playedScores = (scoresData || []).filter(
+      s => s.player_id === p.player_id && s.strokes !== null
+    );
+    const totalStrokes = playedScores.reduce((acc, curr) => acc + (curr.strokes || 0), 0);
+    const totalPar = playedScores.reduce((acc, curr) => acc + (curr.holes?.par || 0), 0);
+
+    return {
+      id: p.player_id,
+      display_name: p.profiles.display_name,
+      total_strokes: totalStrokes,
+      total_par: totalPar,
+    };
+  });
+};
+
+const formatDiff = (diff: number) => {
+  if (diff === 0) return 'E';
+  return diff > 0 ? `+${diff}` : `${diff}`;
+};
+
 export function MatchSummaryScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -31,6 +62,7 @@ export function MatchSummaryScreen() {
   const isViewingHistorical = routeMatchId != null;
   const [loading, setLoading] = useState(true);
   const [playerScores, setPlayerScores] = useState<PlayerScore[]>([]);
+  const [possibleScores, setPossibleScores] = useState<PossibleScoreRow[]>([]);
   const [courseInfo, setCourseInfo] = useState<any>(null);
   const [isCreator, setIsCreator] = useState(false);
 
@@ -101,23 +133,41 @@ export function MatchSummaryScreen() {
 
       if (playerError) throw playerError;
 
-      // 4. Calculate totals
-      const players = (playerData || []).map((p: any) => {
-        const playedScores = (scoresData || []).filter(
-          s => s.player_id === p.player_id && s.strokes !== null
-        );
-        const totalStrokes = playedScores.reduce((acc, curr) => acc + (curr.strokes || 0), 0);
-        const totalPar = playedScores.reduce((acc, curr) => acc + (curr.holes?.par || 0), 0);
-        
-        return {
-          id: p.player_id,
-          display_name: p.profiles.display_name,
-          total_strokes: totalStrokes,
-          total_par: totalPar
-        };
-      });
+      const { data: throwEventsData, error: throwEventsError } = await supabase
+        .from('throw_events')
+        .select('player_id')
+        .eq('match_id', summaryMatchId);
 
-      setPlayerScores(players.sort((a, b) => (a.total_strokes - a.total_par) - (b.total_strokes - b.total_par)));
+      if (throwEventsError) throw throwEventsError;
+
+      // 4. Calculate totals
+      const players = buildPlayerScores(playerData || [], scoresData || []);
+      const sortedPlayers = players.sort((a, b) => (a.total_strokes - a.total_par) - (b.total_strokes - b.total_par));
+      setPlayerScores(sortedPlayers);
+
+      const eventCountsByPlayerId = (throwEventsData || []).reduce((acc: Record<string, number>, event: any) => {
+        const playerId = event.player_id;
+        if (!playerId) return acc;
+        acc[playerId] = (acc[playerId] || 0) + 1;
+        return acc;
+      }, {});
+
+      const possibleScoreRows = sortedPlayers
+        .map((player) => {
+          const eventCount = eventCountsByPlayerId[player.id] || 0;
+          const adjustedStrokes = player.total_strokes - eventCount;
+          return {
+            id: player.id,
+            display_name: player.display_name,
+            actual_strokes: player.total_strokes,
+            event_count: eventCount,
+            adjusted_strokes: adjustedStrokes,
+            adjusted_diff: adjustedStrokes - player.total_par,
+          };
+        })
+        .filter((row) => row.event_count > 0);
+
+      setPossibleScores(possibleScoreRows);
 
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -193,7 +243,7 @@ export function MatchSummaryScreen() {
         <Text style={styles.sectionTitle}>FINAL LEADERBOARD</Text>
         {playerScores.map((player, index) => {
           const scoreDiff = player.total_strokes - player.total_par;
-          const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
+          const scoreDiffText = formatDiff(scoreDiff);
           
           return (
             <View key={player.id} style={[styles.playerRow, index === 0 && styles.winnerRow]}>
@@ -226,6 +276,28 @@ export function MatchSummaryScreen() {
             </View>
           );
         })}
+
+        {possibleScores.length > 0 && (
+          <View style={styles.possibleScoreSection}>
+            <Text style={styles.sectionTitle}>Possible Score</Text>
+            <View style={styles.possibleScoreHeaderRow}>
+              <Text style={[styles.possibleScoreCell, styles.possibleScorePlayerCell]}>Player</Text>
+              <Text style={styles.possibleScoreCell}>Actual</Text>
+              <Text style={styles.possibleScoreCell}>Events</Text>
+              <Text style={styles.possibleScoreCell}>Adjusted</Text>
+              <Text style={styles.possibleScoreCell}>Adj Diff</Text>
+            </View>
+            {possibleScores.map((row) => (
+              <View key={row.id} style={styles.possibleScoreRow}>
+                <Text style={[styles.possibleScoreCell, styles.possibleScorePlayerCell]}>{row.display_name}</Text>
+                <Text style={styles.possibleScoreCell}>{row.actual_strokes}</Text>
+                <Text style={styles.possibleScoreCell}>{row.event_count}</Text>
+                <Text style={styles.possibleScoreCell}>{row.adjusted_strokes}</Text>
+                <Text style={styles.possibleScoreCell}>{formatDiff(row.adjusted_diff)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={styles.actionSection}>
           {!isViewingHistorical ? (
@@ -370,6 +442,37 @@ const styles = StyleSheet.create({
   scoreOverText: { color: '#FF5252' },
   scoreEvenBg: { backgroundColor: 'rgba(255, 255, 255, 0.08)' },
   scoreEvenText: { color: COLORS.textSecondary },
+  possibleScoreSection: {
+    marginTop: 24,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    padding: 16,
+  },
+  possibleScoreHeaderRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  possibleScoreRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderDark,
+  },
+  possibleScoreCell: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontFamily: 'JetBrains Mono',
+  },
+  possibleScorePlayerCell: {
+    flex: 1.6,
+    textAlign: 'left',
+    fontFamily: undefined,
+  },
   actionSection: {
     marginTop: 32,
     gap: 12,
