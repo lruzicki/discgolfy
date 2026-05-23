@@ -7,6 +7,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,6 +16,8 @@ import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { useMatchStore } from '../store/useMatchStore';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SUPPORT_CTA, SUPPORT_MESSAGE, SUPPORT_URL } from '../constants/support';
 
 interface PlayerScore {
   id: string;
@@ -64,17 +68,66 @@ export function MatchSummaryScreen() {
   const [playerScores, setPlayerScores] = useState<PlayerScore[]>([]);
   const [possibleScores, setPossibleScores] = useState<PossibleScoreRow[]>([]);
   const [courseInfo, setCourseInfo] = useState<any>(null);
+  const [holesData, setHolesData] = useState<any[]>([]);
+  const [scoresMap, setScoresMap] = useState<Record<string, Record<string, number | null>>>({});
   const [isCreator, setIsCreator] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [isSupportVisible, setIsSupportVisible] = useState(false);
+  const [hasCheckedSupport, setHasCheckedSupport] = useState(false);
 
   useEffect(() => {
     fetchSummaryData();
   }, []);
+
+  useEffect(() => {
+    if (loading || isViewingHistorical || hasCheckedSupport || !authUserId) return;
+    checkSupportPrompt();
+  }, [loading, isViewingHistorical, hasCheckedSupport, authUserId]);
+
+  const supportShownKey = authUserId ? `support_prompt_shown_v1:${authUserId}` : null;
+  const supportDismissedKey = authUserId ? `support_prompt_dismissed_v1:${authUserId}` : null;
+
+  const checkSupportPrompt = async () => {
+    if (!supportShownKey || !supportDismissedKey) return;
+    try {
+      const [shown, dismissed] = await Promise.all([
+        AsyncStorage.getItem(supportShownKey),
+        AsyncStorage.getItem(supportDismissedKey),
+      ]);
+      if (shown !== 'true' && dismissed !== 'true') {
+        setIsSupportVisible(true);
+      }
+    } finally {
+      setHasCheckedSupport(true);
+    }
+  };
+
+  const closeSupportPrompt = async (dontShowAgain: boolean) => {
+    if (!supportShownKey || !supportDismissedKey) {
+      setIsSupportVisible(false);
+      return;
+    }
+    setIsSupportVisible(false);
+    await AsyncStorage.setItem(supportShownKey, 'true');
+    if (dontShowAgain) {
+      await AsyncStorage.setItem(supportDismissedKey, 'true');
+    }
+  };
+
+  const handleOpenSupport = async () => {
+    try {
+      await Linking.openURL(SUPPORT_URL);
+    } catch {
+      Alert.alert('Unable to open link', SUPPORT_URL);
+    }
+  };
 
   const fetchSummaryData = async () => {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+      setAuthUserId(user.id);
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -95,6 +148,11 @@ export function MatchSummaryScreen() {
             courses (
               name,
               location
+            ),
+            holes (
+              id,
+              hole_number,
+              par
             )
           )
         `)
@@ -104,6 +162,10 @@ export function MatchSummaryScreen() {
       if (matchError) throw matchError;
       setCourseInfo(matchData);
       setIsCreator(profile?.id === matchData.created_by);
+
+      const layoutObj = Array.isArray(matchData.layouts) ? matchData.layouts[0] : matchData.layouts;
+      const fetchedHoles = (layoutObj?.holes || []).sort((a: any, b: any) => a.hole_number - b.hole_number);
+      setHolesData(fetchedHoles);
 
       // 2. Fetch all scores for this match
       const { data: scoresData, error: scoresError } = await supabase
@@ -119,6 +181,13 @@ export function MatchSummaryScreen() {
         .eq('match_id', summaryMatchId);
 
       if (scoresError) throw scoresError;
+
+      const sMap: Record<string, Record<string, number | null>> = {};
+      (scoresData || []).forEach((s: any) => {
+        if (!sMap[s.hole_id]) sMap[s.hole_id] = {};
+        sMap[s.hole_id][s.player_id] = s.strokes;
+      });
+      setScoresMap(sMap);
 
       // 3. Fetch players
       const { data: playerData, error: playerError } = await supabase
@@ -326,6 +395,24 @@ export function MatchSummaryScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={isSupportVisible} transparent animationType="fade">
+        <View style={styles.supportOverlay}>
+          <View style={styles.supportModal}>
+            <Text style={styles.supportTitle}>Keep Discgolfy Free</Text>
+            <Text style={styles.supportBody}>{SUPPORT_MESSAGE}</Text>
+            <TouchableOpacity style={styles.supportPrimaryBtn} onPress={handleOpenSupport}>
+              <Text style={styles.supportPrimaryBtnText}>{SUPPORT_CTA}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.supportSecondaryBtn} onPress={() => closeSupportPrompt(false)}>
+              <Text style={styles.supportSecondaryBtnText}>Maybe later</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.supportSecondaryBtn} onPress={() => closeSupportPrompt(true)}>
+              <Text style={styles.supportSecondaryBtnText}>Don't show again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -473,6 +560,16 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     fontFamily: undefined,
   },
+  summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
+  summaryRow: { flexDirection: 'row', marginBottom: 2 },
+  summaryCell: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
+  summaryCellSticky: { flex: 2.5, alignItems: 'flex-start', paddingHorizontal: 4, backgroundColor: 'transparent', marginRight: 8 },
+  summaryLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  summaryValue: { fontSize: 16, fontWeight: '800', fontFamily: 'JetBrains Mono' },
+  summaryHoleNum: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' },
+  summaryPar: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: '400' },
+  summaryPlayerName: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  unplayableSummaryCell: { backgroundColor: 'rgba(255, 82, 82, 0.1)', opacity: 0.5 },
   actionSection: {
     marginTop: 32,
     gap: 12,
@@ -523,5 +620,51 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     opacity: 0.8,
+  },
+  supportOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  supportModal: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    padding: 18,
+  },
+  supportTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  supportBody: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  supportPrimaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  supportPrimaryBtnText: {
+    color: COLORS.onPrimary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  supportSecondaryBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  supportSecondaryBtnText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
