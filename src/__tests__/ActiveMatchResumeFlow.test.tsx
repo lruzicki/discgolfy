@@ -32,14 +32,22 @@ jest.mock('expo-location', () => ({
   Accuracy: { High: 'high' },
   requestForegroundPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'denied' })),
   watchPositionAsync: jest.fn(),
+  getCurrentPositionAsync: jest.fn(),
 }));
 
 const mockNavigate = jest.fn();
+const mockSetParams = jest.fn();
+const mockRouteParams: { current: any } = { current: undefined };
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: mockNavigate,
+    setParams: mockSetParams,
   }),
+  useRoute: () => ({
+    params: mockRouteParams.current,
+  }),
+  useFocusEffect: (callback: () => void) => callback(),
 }));
 
 jest.mock('../lib/supabase', () => ({
@@ -87,6 +95,7 @@ describe('Active Match resume guard', () => {
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockInjectedScripts.length = 0;
+    mockRouteParams.current = undefined;
     useMatchStore.getState().resetMatch();
     mockSupabaseFrom.mockReturnValue(mockOrderedQuery({ data: [], error: null }));
   });
@@ -416,5 +425,83 @@ describe('Active Match resume guard', () => {
 
     expect(mockNavigate).not.toHaveBeenCalledWith('MatchSummary');
     expect(useMatchStore.getState().matchId).toBe('match-1');
+  });
+
+  it('opens Add New Disc from active match with pending throw return context', async () => {
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+    (Location.getCurrentPositionAsync as jest.Mock)
+      .mockResolvedValueOnce({ coords: { latitude: 54.1, longitude: 18.1 } })
+      .mockResolvedValueOnce({ coords: { latitude: 54.2, longitude: 18.2 } });
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores' || table === 'throws') {
+        return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'discs') {
+        return mockEqChain({ data: [{ id: 'disc-1', name: 'Driver', color_rgba: '#fff' }], error: null });
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(screen.UNSAFE_getByProps({ name: 'ruler' }).parent?.parent);
+    });
+
+    await waitFor(() => {
+      expect(screen.UNSAFE_getByProps({ name: 'stop-circle' })).toBeTruthy();
+    });
+
+    fireEvent.press(screen.UNSAFE_getByProps({ name: 'stop-circle' }).parent?.parent);
+    fireEvent.press(await screen.findByText('Add New Disc'));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('Profile', {
+        screen: 'AddEditDisc',
+        params: {
+          returnToActiveMatchDiscPicker: true,
+          pendingThrow: { startLat: 54.1, startLng: 18.1 },
+          tempEndCoords: { lat: 54.2, lng: 18.2 },
+        },
+      });
+    });
   });
 });

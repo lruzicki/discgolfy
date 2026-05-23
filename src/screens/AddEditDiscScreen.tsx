@@ -39,6 +39,7 @@ export function AddEditDiscScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const disc = route.params?.disc;
+  const returnToActiveMatchDiscPicker = !!route.params?.returnToActiveMatchDiscPicker;
   const isEditing = !!disc;
 
   const [form, setForm] = useState<DiscForm>({
@@ -98,6 +99,18 @@ export function AddEditDiscScreen() {
           .from('discs')
           .insert(discData);
         if (error) throw error;
+      }
+
+      if (returnToActiveMatchDiscPicker) {
+        navigation.navigate('Play', {
+          screen: 'ActiveMatch',
+          params: {
+            returnToDiscPicker: true,
+            pendingThrow: route.params?.pendingThrow,
+            tempEndCoords: route.params?.tempEndCoords,
+          },
+        });
+        return;
       }
 
       navigation.goBack();

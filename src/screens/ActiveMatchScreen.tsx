@@ -16,7 +16,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { useMatchStore } from '../store/useMatchStore';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../lib/utils';
@@ -432,6 +432,7 @@ const MapComponent = ({ hole, isRecording, playerPos, throwStart }: {
 
 export function ActiveMatchScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const appState = useRef(AppState.currentState);
   
   const { 
@@ -522,6 +523,27 @@ export function ActiveMatchScreen() {
 
     return () => subscription.remove();
   }, [matchId, layoutId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!route.params?.returnToDiscPicker) return;
+
+      if (route.params.pendingThrow) {
+        setPendingThrow(route.params.pendingThrow);
+      }
+      if (route.params.tempEndCoords) {
+        setTempEndCoords(route.params.tempEndCoords);
+      }
+
+      setIsDiscModalVisible(true);
+      fetchDiscs();
+      navigation.setParams({
+        returnToDiscPicker: undefined,
+        pendingThrow: undefined,
+        tempEndCoords: undefined,
+      });
+    }, [route.params, navigation])
+  );
 
   const fetchThrowsForHole = async () => {
     if (!currentHole || !matchId) return;
@@ -952,7 +974,14 @@ export function ActiveMatchScreen() {
                     style={[styles.discItem, { borderBottomColor: COLORS.primary, borderBottomWidth: 1, marginBottom: 8 }]} 
                     onPress={() => {
                       setIsDiscModalVisible(false);
-                      navigation.navigate('Profile', { screen: 'AddEditDisc' });
+                      navigation.navigate('Profile', {
+                        screen: 'AddEditDisc',
+                        params: {
+                          returnToActiveMatchDiscPicker: true,
+                          pendingThrow,
+                          tempEndCoords,
+                        },
+                      });
                     }}
                   >
                     <View style={[styles.discColor, { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' }]}>
