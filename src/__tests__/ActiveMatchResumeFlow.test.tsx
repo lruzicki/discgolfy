@@ -1,6 +1,7 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as Location from 'expo-location';
+import { Alert } from 'react-native';
 import { ActiveMatchScreen } from '../screens/ActiveMatchScreen';
 import { useMatchStore } from '../store/useMatchStore';
 
@@ -69,9 +70,22 @@ function mockEqQuery(result: any) {
   return query;
 }
 
+function mockEqChain(result: any) {
+  const query: any = {
+    select: jest.fn(() => query),
+    eq: jest.fn(() => query),
+    is: jest.fn(() => Promise.resolve(result)),
+    order: jest.fn(() => Promise.resolve(result)),
+    update: jest.fn(() => query),
+  };
+
+  return query;
+}
+
 describe('Active Match resume guard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     mockInjectedScripts.length = 0;
     useMatchStore.getState().resetMatch();
     mockSupabaseFrom.mockReturnValue(mockOrderedQuery({ data: [], error: null }));
@@ -221,5 +235,186 @@ describe('Active Match resume guard', () => {
     });
 
     expect(screen.getByTestId('match-map-webview').props.source).toBe(initialSource);
+  });
+
+  it('finishes match and navigates to Match Summary', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return {
+          ...mockEqChain({
+            data: [{
+              player_id: 'player-1',
+              profiles: { id: 'player-1', display_name: 'Alice' },
+            }],
+            error: null,
+          }),
+          update: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return mockEqQuery({
+          data: [{
+            hole_id: 'hole-1',
+            player_id: 'player-1',
+            strokes: 3,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'discs' || table === 'throws') {
+        return mockEqChain({ data: [], error: null });
+      }
+
+      if (table === 'matches') {
+        return {
+          update: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ error: null })),
+          })),
+        };
+      }
+
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: null, error: null })),
+            })),
+          })),
+        };
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('FINISH ROUND')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('FINISH ROUND'));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('MatchSummary');
+    });
+  });
+
+  it('shows finish error and stays in active play when completion update fails', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return {
+          ...mockEqChain({
+            data: [{
+              player_id: 'player-1',
+              profiles: { id: 'player-1', display_name: 'Alice' },
+            }],
+            error: null,
+          }),
+          update: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return mockEqQuery({
+          data: [{
+            hole_id: 'hole-1',
+            player_id: 'player-1',
+            strokes: 3,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'discs' || table === 'throws') {
+        return mockEqChain({ data: [], error: null });
+      }
+
+      if (table === 'matches') {
+        return {
+          update: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({ error: { message: 'update failed' } })),
+          })),
+        };
+      }
+
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: null, error: null })),
+            })),
+          })),
+        };
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('FINISH ROUND')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('FINISH ROUND'));
+
+    await waitFor(() => {
+      expect(Alert.alert).toHaveBeenCalledWith('Error', 'update failed');
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalledWith('MatchSummary');
+    expect(useMatchStore.getState().matchId).toBe('match-1');
   });
 });

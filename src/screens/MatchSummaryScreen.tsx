@@ -26,6 +26,8 @@ export function MatchSummaryScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { matchId, resetMatch } = useMatchStore();
+  const summaryMatchId = route.params?.matchId || matchId;
+  const isViewingHistorical = !!route.params?.matchId;
   const [loading, setLoading] = useState(true);
   const [playerScores, setPlayerScores] = useState<PlayerScore[]>([]);
   const [courseInfo, setCourseInfo] = useState<any>(null);
@@ -63,7 +65,7 @@ export function MatchSummaryScreen() {
             )
           )
         `)
-        .eq('id', matchId)
+        .eq('id', summaryMatchId)
         .single();
 
       if (matchError) throw matchError;
@@ -81,7 +83,7 @@ export function MatchSummaryScreen() {
             par
           )
         `)
-        .eq('match_id', matchId);
+        .eq('match_id', summaryMatchId);
 
       if (scoresError) throw scoresError;
 
@@ -94,7 +96,7 @@ export function MatchSummaryScreen() {
             display_name
           )
         `)
-        .eq('match_id', matchId);
+        .eq('match_id', summaryMatchId);
 
       if (playerError) throw playerError;
 
@@ -146,7 +148,7 @@ export function MatchSummaryScreen() {
               const { error } = await supabase
                 .from('matches')
                 .delete()
-                .eq('id', matchId);
+                .eq('id', summaryMatchId);
               
               if (error) throw error;
               

@@ -727,15 +727,30 @@ export function ActiveMatchScreen() {
     try {
       setLoading(true);
       await triggerSync();
-      const { data: scoresData } = await supabase.from('scores').select('strokes, player_id').eq('match_id', matchId);
+      const { data: scoresData, error: scoresError } = await supabase
+        .from('scores')
+        .select('strokes, player_id')
+        .eq('match_id', matchId);
+      if (scoresError) throw scoresError;
+
       const playerTotals = players.map(player => {
         const total = (scoresData || []).filter(s => s.player_id === player.id).reduce((acc, curr) => acc + (curr.strokes || 0), 0);
         return { player_id: player.id, total_score: total };
       });
       for (const total of playerTotals) {
-        await supabase.from('match_players').update({ total_score: total.total_score }).eq('match_id', matchId).eq('player_id', total.player_id);
+        const { error: playerUpdateError } = await supabase
+          .from('match_players')
+          .update({ total_score: total.total_score })
+          .eq('match_id', matchId)
+          .eq('player_id', total.player_id);
+        if (playerUpdateError) throw playerUpdateError;
       }
-      await supabase.from('matches').update({ status: 'completed' }).eq('id', matchId);
+      const { error: matchUpdateError } = await supabase
+        .from('matches')
+        .update({ status: 'completed' })
+        .eq('id', matchId);
+      if (matchUpdateError) throw matchUpdateError;
+
       navigation.navigate('MatchSummary');
     } catch (error: any) {
       Alert.alert('Error', error.message);

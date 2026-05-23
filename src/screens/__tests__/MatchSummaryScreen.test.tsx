@@ -1,0 +1,113 @@
+import React from 'react';
+import { render, waitFor } from '@testing-library/react-native';
+import { MatchSummaryScreen } from '../MatchSummaryScreen';
+import { useMatchStore } from '../../store/useMatchStore';
+
+const mockNavigate = jest.fn();
+const mockGoBack = jest.fn();
+const mockSupabaseFrom = jest.fn();
+
+jest.mock('@expo/vector-icons', () => ({
+  Ionicons: 'Ionicons',
+  MaterialCommunityIcons: 'MaterialCommunityIcons',
+}));
+
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    goBack: mockGoBack,
+  }),
+  useRoute: () => ({
+    params: undefined,
+  }),
+}));
+
+jest.mock('../../lib/supabase', () => ({
+  supabase: {
+    from: (...args: any[]) => mockSupabaseFrom(...args),
+    auth: {
+      getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'auth-1' } }, error: null })),
+    },
+  },
+}));
+
+describe('MatchSummaryScreen', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useMatchStore.getState().resetMatch();
+  });
+
+  it('renders from active-play match context without history route params', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-1',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 18,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ strokes: 3, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ player_id: 'player-1', profiles: { display_name: 'Alice' } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    useMatchStore.setState({ matchId: 'match-1' });
+
+    const screen = render(<MatchSummaryScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Final Results')).toBeTruthy();
+      expect(screen.getByText('PLAY AGAIN')).toBeTruthy();
+      expect(screen.getByText('BACK TO HUB')).toBeTruthy();
+    });
+  });
+});
