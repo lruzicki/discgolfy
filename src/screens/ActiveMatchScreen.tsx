@@ -473,6 +473,9 @@ export function ActiveMatchScreen() {
   const [selectedThrowType, setSelectedThrowType] = useState<ThrowType | null>(null);
   const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
   const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
+  const [unplayableScoreSnapshots, setUnplayableScoreSnapshots] = useState<Record<string, Record<string, number | null | undefined>>>({});
+  const isSchemaCacheMissing = (error: any, key: string) =>
+    Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
 
   useEffect(() => {
     let locationWatcher: any;
@@ -571,7 +574,8 @@ export function ActiveMatchScreen() {
         .single();
       if (!profile) return;
 
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      const withThrowType = await supabase
         .from('throws')
         .select(`
           id,
@@ -589,7 +593,29 @@ export function ActiveMatchScreen() {
         .eq('player_id', profile.id)
         .order('throw_number', { ascending: true });
 
-      if (error) throw error;
+      if (withThrowType.error && isSchemaCacheMissing(withThrowType.error, 'throw_type')) {
+        const legacyResult = await supabase
+          .from('throws')
+          .select(`
+            id,
+            throw_number,
+            distance_m,
+            disc_id,
+            discs (
+              name,
+              color_rgba
+            )
+          `)
+          .eq('match_id', matchId)
+          .eq('hole_id', currentHole.id)
+          .eq('player_id', profile.id)
+          .order('throw_number', { ascending: true });
+        if (legacyResult.error) throw legacyResult.error;
+        data = legacyResult.data || [];
+      } else {
+        if (withThrowType.error) throw withThrowType.error;
+        data = withThrowType.data || [];
+      }
       
       const formattedData: ThrowRecord[] = (data || []).map((t: any) => ({
         id: t.id,
@@ -754,7 +780,24 @@ export function ActiveMatchScreen() {
           throw_type: selectedThrowType,
         });
 
-      if (error) throw error;
+      if (error) {
+        if (!isSchemaCacheMissing(error, 'throw_type')) throw error;
+        const legacyInsert = await supabase
+          .from('throws')
+          .insert({
+            match_id: matchId,
+            player_id: profile.id,
+            hole_id: currentHole.id,
+            disc_id: discId,
+            throw_number: throwNumber,
+            start_lat: pendingThrow.startLat,
+            start_lng: pendingThrow.startLng,
+            end_lat: tempEndCoords.lat,
+            end_lng: tempEndCoords.lng,
+            distance_m: distance,
+          });
+        if (legacyInsert.error) throw legacyInsert.error;
+      }
       setPendingThrow(null);
       setTempEndCoords(null);
       setSelectedThrowType(null);
@@ -782,7 +825,9 @@ export function ActiveMatchScreen() {
           event_type: eventType,
         });
 
-      if (error) throw error;
+      if (error) {
+        if (!isSchemaCacheMissing(error, 'throw_event')) throw error;
+      }
       setIsEventActionsVisible(false);
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -827,9 +872,27 @@ export function ActiveMatchScreen() {
 
   const markCurrentHoleUnplayable = async () => {
     if (!currentHole || players.length === 0) return;
-    players.forEach((player) => {
-      setScore(currentHole.id, player.id, null);
-    });
+    const holeScores = scores[currentHole.id] || {};
+    const isCurrentlyUnplayable = players.every((player) => holeScores[player.id] === null);
+    if (isCurrentlyUnplayable) {
+      const snapshot = unplayableScoreSnapshots[currentHole.id] || {};
+      players.forEach((player) => {
+        const previousValue = snapshot[player.id];
+        setScore(currentHole.id, player.id, previousValue === undefined ? null : previousValue);
+      });
+      setUnplayableScoreSnapshots((prev) => {
+        const next = { ...prev };
+        delete next[currentHole.id];
+        return next;
+      });
+    } else {
+      const snapshot: Record<string, number | null | undefined> = {};
+      players.forEach((player) => {
+        snapshot[player.id] = holeScores[player.id];
+        setScore(currentHole.id, player.id, null);
+      });
+      setUnplayableScoreSnapshots((prev) => ({ ...prev, [currentHole.id]: snapshot }));
+    }
     await triggerSync();
   };
 

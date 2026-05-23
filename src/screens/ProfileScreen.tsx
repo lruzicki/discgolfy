@@ -90,6 +90,8 @@ export function ProfileScreen({ route, navigation }: any) {
     hitPeople: 0,
   });
   const [recentPerformance, setRecentPerformance] = useState<{label: string, diff: number}[]>([]);
+  const isSchemaCacheMissing = (error: any, key: string) =>
+    Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
 
   useFocusEffect(
     React.useCallback(() => {
@@ -121,13 +123,16 @@ export function ProfileScreen({ route, navigation }: any) {
         .eq('matches.status', 'completed');
 
       // 2. Fetch Longest Throw
-      const { data: throwData } = await supabase
+      let throwData: any[] = [];
+      const throwsWithTypeResult = await supabase
         .from('throws')
         .select('distance_m, matches!inner(status)')
         .eq('player_id', profile.id)
         .eq('matches.status', 'completed')
         .order('distance_m', { ascending: false })
         .limit(1);
+      if (throwsWithTypeResult.error) throw throwsWithTypeResult.error;
+      throwData = throwsWithTypeResult.data || [];
 
       // 3. Fetch Best Round & Recent Rounds
       const { data: bestRoundData } = await supabase
@@ -161,18 +166,26 @@ export function ProfileScreen({ route, navigation }: any) {
         .not('strokes', 'is', null)
         .order('created_at', { ascending: false });
 
-      const { data: throwEventData } = await supabase
+      let throwEventData: any[] = [];
+      const throwEventsResult = await supabase
         .from('throw_events')
         .select('event_type, matches!inner(status)')
         .eq('player_id', profile.id)
         .eq('matches.status', 'completed');
+      if (throwEventsResult.error) {
+        if (!isSchemaCacheMissing(throwEventsResult.error, 'throw_event')) {
+          throw throwEventsResult.error;
+        }
+      } else {
+        throwEventData = throwEventsResult.data || [];
+      }
 
       const nextStats = buildProfileStats({
         roundsCount: roundsCount || 0,
         bestRoundData: bestRoundData || [],
         scoresData: scoresData || [],
-        throwData: throwData || [],
-        throwEventData: throwEventData || [],
+        throwData,
+        throwEventData,
       });
 
       setStats({
@@ -279,31 +292,28 @@ export function ProfileScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.statsGrid}>
-          <View style={styles.statCardHalf}>
+          <View style={styles.statCardQuarter}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="tree" size={16} color="#2E7D32" />
               <Text style={styles.statLabel}>TREE</Text>
             </View>
             <Text style={styles.statValue}>{stats.treeHits}</Text>
           </View>
-          <View style={styles.statCardHalf}>
+          <View style={styles.statCardQuarter}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="waves" size={16} color="#1E88E5" />
               <Text style={styles.statLabel}>WATER</Text>
             </View>
             <Text style={styles.statValue}>{stats.waterHits}</Text>
           </View>
-        </View>
-
-        <View style={styles.statsGrid}>
-          <View style={styles.statCardHalf}>
+          <View style={styles.statCardQuarter}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="alert-octagon-outline" size={16} color="#FF7043" />
               <Text style={styles.statLabel}>OB</Text>
             </View>
             <Text style={styles.statValue}>{stats.obHits}</Text>
           </View>
-          <View style={styles.statCardHalf}>
+          <View style={styles.statCardQuarter}>
             <View style={styles.statHeader}>
               <MaterialCommunityIcons name="account-alert-outline" size={16} color="#EF5350" />
               <Text style={styles.statLabel}>HIT PERSON</Text>
@@ -482,6 +492,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 12,
     padding: 16,
+  },
+  statCardQuarter: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 12,
   },
   statCardFull: {
     backgroundColor: COLORS.surface,

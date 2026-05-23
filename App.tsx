@@ -46,7 +46,9 @@ function ProfileStack() {
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="Bag" component={BagScreen} />
       <Stack.Screen name="AddEditDisc" component={AddEditDiscScreen} />
+      <Stack.Screen name="LongestThrows" component={LongestThrowsScreen} />
       <Stack.Screen name="MatchHistory" component={MatchHistoryScreen} />
+      <Stack.Screen name="MatchSummary" component={MatchSummaryScreen} />
     </Stack.Navigator>
   );
 }

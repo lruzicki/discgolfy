@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 import { useMatchStore } from '../store/useMatchStore';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { SUPPORT_CTA, SUPPORT_MESSAGE, SUPPORT_URL } from '../constants/support';
 
 interface ActiveMatch {
   id: string;
@@ -85,6 +86,14 @@ export function PlayScreen() {
     navigation.navigate('ActiveMatch');
   };
 
+  const handleOpenSupport = async () => {
+    try {
+      await Linking.openURL(SUPPORT_URL);
+    } catch {
+      Alert.alert('Unable to open link', SUPPORT_URL);
+    }
+  };
+
   const renderActiveMatch = (match: ActiveMatch) => (
     <TouchableOpacity key={match.id} style={styles.matchCard} onPress={() => handleResumeMatch(match)}>
       <View style={styles.matchIcon}>
@@ -146,6 +155,13 @@ export function PlayScreen() {
             >
               <Ionicons name="time-outline" size={24} color={COLORS.primary} />
               <Text style={styles.quickText}>History</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.supportCard}>
+            <Text style={styles.supportText}>{SUPPORT_MESSAGE}</Text>
+            <TouchableOpacity onPress={handleOpenSupport} style={styles.supportCta}>
+              <Text style={styles.supportCtaText}>{SUPPORT_CTA}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -270,5 +286,31 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontWeight: '700',
+  },
+  supportCard: {
+    marginTop: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    padding: 14,
+  },
+  supportText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  supportCta: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(144, 202, 249, 0.15)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  supportCtaText: {
+    color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 13,
   },
 });

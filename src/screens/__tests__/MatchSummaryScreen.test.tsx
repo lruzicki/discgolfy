@@ -1,7 +1,9 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import { MatchSummaryScreen } from '../MatchSummaryScreen';
 import { useMatchStore } from '../../store/useMatchStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking } from 'react-native';
 
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
@@ -32,11 +34,19 @@ jest.mock('../../lib/supabase', () => ({
   },
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+}));
+
 describe('MatchSummaryScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = undefined;
     useMatchStore.getState().resetMatch();
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
+    (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('uses history route match id and historical actions without active store context', async () => {
@@ -461,5 +471,163 @@ describe('MatchSummaryScreen', () => {
       expect(screen.getAllByText('4').length).toBeGreaterThan(0);
       expect(screen.getAllByText('+1').length).toBeGreaterThan(0);
     });
+  });
+
+  it('shows post-round support modal once for active summary and allows dont-show-again', async () => {
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-1',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 18,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ strokes: 3, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ player_id: 'player-1', profiles: { display_name: 'Alice' } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    useMatchStore.setState({ matchId: 'match-1' });
+    const screen = render(<MatchSummaryScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/built by a solo developer and kept free/i)).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Buy Me a Coffee'));
+    await waitFor(() => {
+      expect(Linking.openURL).toHaveBeenCalledWith('https://buymeacoffee.com/ruzicki');
+    });
+
+    fireEvent.press(screen.getByText("Don't show again"));
+    await waitFor(() => {
+      expect(AsyncStorage.setItem).toHaveBeenCalled();
+    });
+  });
+
+  it('does not show post-round support modal for historical summaries or after prior dismissal', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => {
+      if (key.includes('dismissed')) return 'true';
+      return null;
+    });
+
+    mockRouteParams = { matchId: 'match-history-1' };
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'matches') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({
+                data: {
+                  id: 'match-history-1',
+                  date_played: '2026-05-20',
+                  created_by: 'player-2',
+                  layouts: {
+                    name: 'Main Layout',
+                    hole_count: 18,
+                    courses: { name: 'Reagana', location: 'Gdansk' },
+                  },
+                },
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ strokes: 3, player_id: 'player-1', hole_id: 'hole-1', holes: { par: 3 } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      if (table === 'match_players') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [{ player_id: 'player-1', profiles: { display_name: 'Alice' } }],
+              error: null,
+            })),
+          })),
+        };
+      }
+
+      return {
+        select: jest.fn(() => ({
+          eq: jest.fn(() => Promise.resolve({ data: [], error: null })),
+        })),
+      };
+    });
+
+    const screen = render(<MatchSummaryScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Final Results')).toBeTruthy();
+    });
+
+    expect(screen.queryByText(/built by a solo developer and kept free/i)).toBeNull();
   });
 });

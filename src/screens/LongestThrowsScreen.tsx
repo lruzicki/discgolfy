@@ -11,6 +11,8 @@ export function LongestThrowsScreen() {
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<LongestThrowItem[]>([]);
+  const isSchemaCacheMissing = (error: any, key: string) =>
+    Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
 
   useEffect(() => {
     fetchLongestThrows();
@@ -30,7 +32,7 @@ export function LongestThrowsScreen() {
 
       if (!profile) return;
 
-      const { data, error } = await supabase
+      const withThrowType = await supabase
         .from('throws')
         .select(`
           id,
@@ -55,8 +57,36 @@ export function LongestThrowsScreen() {
         .not('distance_m', 'is', null)
         .order('distance_m', { ascending: false });
 
-      if (error) throw error;
-      setItems(buildLongestThrows((data || []) as any));
+      if (withThrowType.error && isSchemaCacheMissing(withThrowType.error, 'throw_type')) {
+        const legacyResult = await supabase
+          .from('throws')
+          .select(`
+            id,
+            distance_m,
+            created_at,
+            discs ( name ),
+            holes (
+              hole_number,
+              layouts (
+                name,
+                courses ( name )
+              )
+            ),
+            matches!inner (
+              status,
+              date_played
+            )
+          `)
+          .eq('player_id', profile.id)
+          .eq('matches.status', 'completed')
+          .not('distance_m', 'is', null)
+          .order('distance_m', { ascending: false });
+        if (legacyResult.error) throw legacyResult.error;
+        setItems(buildLongestThrows((legacyResult.data || []) as any));
+      } else {
+        if (withThrowType.error) throw withThrowType.error;
+        setItems(buildLongestThrows((withThrowType.data || []) as any));
+      }
     } catch (error) {
       console.error('Error fetching longest throws:', error);
     } finally {
