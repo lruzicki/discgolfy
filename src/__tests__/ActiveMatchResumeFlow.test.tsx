@@ -461,8 +461,12 @@ describe('Active Match resume guard', () => {
         });
       }
 
-      if (table === 'scores' || table === 'throws') {
+      if (table === 'scores') {
         return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'throws') {
+        return mockEqChain({ data: [], error: null });
       }
 
       if (table === 'discs') {
@@ -539,8 +543,12 @@ describe('Active Match resume guard', () => {
         });
       }
 
-      if (table === 'scores' || table === 'throws') {
+      if (table === 'scores') {
         return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'throws' || table === 'discs') {
+        return mockEqChain({ data: [], error: null });
       }
 
       if (table === 'discs') {
@@ -602,8 +610,12 @@ describe('Active Match resume guard', () => {
         });
       }
 
-      if (table === 'scores' || table === 'throws') {
+      if (table === 'scores') {
         return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'throws' || table === 'discs') {
+        return mockEqChain({ data: [], error: null });
       }
 
       if (table === 'discs') {
@@ -758,5 +770,93 @@ describe('Active Match resume guard', () => {
 
     expect(screen.getByText('E (3)')).toBeTruthy();
     expect(useMatchStore.getState().scores['hole-1']?.['player-1']).toBe(3);
+  });
+
+  it('records one tree event for the current player and hole', async () => {
+    (Location.requestForegroundPermissionsAsync as jest.Mock).mockResolvedValue({ status: 'granted' });
+    (supabase.auth.getUser as jest.Mock).mockResolvedValue({
+      data: { user: { id: 'auth-1' } },
+      error: null,
+    });
+
+    const insertThrowEvent = jest.fn(() => Promise.resolve({ error: null }));
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [{
+            player_id: 'player-1',
+            profiles: { id: 'player-1', display_name: 'Alice' },
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'scores') {
+        return mockEqQuery({ data: [], error: null });
+      }
+
+      if (table === 'throws' || table === 'discs') {
+        return mockEqChain({ data: [], error: null });
+      }
+
+      if (table === 'profiles') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              single: jest.fn(() => Promise.resolve({ data: { id: 'player-1' }, error: null })),
+            })),
+          })),
+        };
+      }
+
+      if (table === 'throw_events') {
+        return {
+          insert: insertThrowEvent,
+        };
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByLabelText('Open throw events'));
+    fireEvent.press(screen.getByLabelText('Record tree event'));
+
+    await waitFor(() => {
+      expect(insertThrowEvent).toHaveBeenCalledTimes(1);
+      expect(insertThrowEvent).toHaveBeenCalledWith({
+        match_id: 'match-1',
+        player_id: 'player-1',
+        hole_id: 'hole-1',
+        event_type: 'tree',
+      });
+    });
   });
 });

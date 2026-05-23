@@ -1,3 +1,5 @@
+import { ThrowEventType } from '../constants/throwEvents';
+
 export interface MatchSummaryRow {
   total_score: number | null;
   matches?: {
@@ -21,6 +23,11 @@ export interface ThrowRow {
   matches?: { status?: string | null } | null;
 }
 
+export interface ThrowEventRow {
+  event_type: ThrowEventType;
+  matches?: { status?: string | null } | null;
+}
+
 export interface ProfileStatsResult {
   roundsPlayed: number;
   avgScore: number;
@@ -31,6 +38,10 @@ export interface ProfileStatsResult {
   bestRound: string;
   birdies: number;
   eagles: number;
+  treeHits: number;
+  waterHits: number;
+  obHits: number;
+  hitPeople: number;
   recentPerformance: Array<{ label: string; diff: number }>;
 }
 
@@ -41,11 +52,13 @@ export function buildProfileStats(input: {
   bestRoundData: MatchSummaryRow[];
   scoresData: ScoreRow[];
   throwData: ThrowRow[];
+  throwEventData?: ThrowEventRow[];
 }): ProfileStatsResult {
   const completedScores = (input.scoresData || []).filter(
     (s) => isCompleted(s.matches?.status) && s.strokes !== null
   );
   const completedThrows = (input.throwData || []).filter((t) => isCompleted(t.matches?.status));
+  const completedThrowEvents = (input.throwEventData || []).filter((e) => isCompleted(e.matches?.status));
 
   const longestThrow = completedThrows.length
     ? Math.max(...completedThrows.map((t) => t.distance_m || 0))
@@ -84,6 +97,10 @@ export function buildProfileStats(input: {
   let totalPar = 0;
   let birdies = 0;
   let eagles = 0;
+  let treeHits = 0;
+  let waterHits = 0;
+  let obHits = 0;
+  let hitPeople = 0;
   let bestHoleDiff = Infinity;
   let bestHoleStr = 'N/A';
   let bestHoleDetails = '';
@@ -108,6 +125,13 @@ export function buildProfileStats(input: {
     }
   });
 
+  completedThrowEvents.forEach((event) => {
+    if (event.event_type === 'tree') treeHits++;
+    if (event.event_type === 'water') waterHits++;
+    if (event.event_type === 'ob') obHits++;
+    if (event.event_type === 'hit_person') hitPeople++;
+  });
+
   return {
     roundsPlayed: input.roundsCount || 0,
     avgScore: completedScores.length > 0 ? (totalStrokes - totalPar) / (input.roundsCount || 1) : 0,
@@ -125,6 +149,10 @@ export function buildProfileStats(input: {
             : `${bestRoundDiff}`,
     birdies,
     eagles,
+    treeHits,
+    waterHits,
+    obHits,
+    hitPeople,
     recentPerformance,
   };
 }

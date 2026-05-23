@@ -84,4 +84,25 @@ describe('buildProfileStats', () => {
     expect(stats.bestRound).toBe('E');
     expect(stats.recentPerformance).toEqual([{ label: '10/5', diff: 0 }]);
   });
+
+  it('counts throw events from completed matches only', () => {
+    const stats = buildProfileStats({
+      roundsCount: 1,
+      bestRoundData: [],
+      scoresData: [],
+      throwData: [],
+      throwEventData: [
+        { event_type: 'tree', matches: { status: 'completed' } },
+        { event_type: 'tree', matches: { status: 'active' } },
+        { event_type: 'water', matches: { status: 'completed' } },
+        { event_type: 'ob', matches: { status: 'completed' } },
+        { event_type: 'hit_person', matches: { status: 'completed' } },
+      ],
+    });
+
+    expect(stats.treeHits).toBe(1);
+    expect(stats.waterHits).toBe(1);
+    expect(stats.obHits).toBe(1);
+    expect(stats.hitPeople).toBe(1);
+  });
 });

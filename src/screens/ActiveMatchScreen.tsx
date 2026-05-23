@@ -20,6 +20,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { calculateDistance } from '../lib/utils';
+import { ThrowEventType } from '../constants/throwEvents';
 
 interface Player {
   id: string;
@@ -460,6 +461,7 @@ export function ActiveMatchScreen() {
   const [activeNavItemIndex, setActiveNavItemIndex] = useState(0);
   const [isThrowHistoryVisible, setIsThrowHistoryVisible] = useState(false);
   const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
+  const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
 
   useEffect(() => {
     let locationWatcher: any;
@@ -743,6 +745,30 @@ export function ActiveMatchScreen() {
     }
   };
 
+  const recordThrowEvent = async (eventType: ThrowEventType) => {
+    if (!currentHole || !matchId) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase.from('profiles').select('id').eq('auth_id', user.id).single();
+      if (!profile) return;
+
+      const { error } = await supabase
+        .from('throw_events')
+        .insert({
+          match_id: matchId,
+          player_id: profile.id,
+          hole_id: currentHole.id,
+          event_type: eventType,
+        });
+
+      if (error) throw error;
+      setIsEventActionsVisible(false);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
   const handleFinishMatch = async () => {
     try {
       setLoading(true);
@@ -833,8 +859,52 @@ export function ActiveMatchScreen() {
                 >
                   <MaterialCommunityIcons name="history" size={22} color={COLORS.textSecondary} />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.iconBtn, isEventActionsVisible && { backgroundColor: COLORS.primary }]}
+                  accessibilityLabel="Open throw events"
+                  onPress={() => setIsEventActionsVisible((current) => !current)}
+                >
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={22}
+                    color={isEventActionsVisible ? COLORS.onPrimary : COLORS.textSecondary}
+                  />
+                </TouchableOpacity>
               </View>
             </View>
+
+            {isEventActionsVisible && (
+              <View style={styles.throwEventActions}>
+                <TouchableOpacity
+                  style={styles.throwEventAction}
+                  accessibilityLabel="Record tree event"
+                  onPress={() => recordThrowEvent('tree')}
+                >
+                  <MaterialCommunityIcons name="tree" size={18} color="#2E7D32" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.throwEventAction}
+                  accessibilityLabel="Record water event"
+                  onPress={() => recordThrowEvent('water')}
+                >
+                  <MaterialCommunityIcons name="waves" size={18} color="#1E88E5" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.throwEventAction}
+                  accessibilityLabel="Record ob event"
+                  onPress={() => recordThrowEvent('ob')}
+                >
+                  <MaterialCommunityIcons name="alert-octagon-outline" size={18} color="#FF7043" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.throwEventAction}
+                  accessibilityLabel="Record hit person event"
+                  onPress={() => recordThrowEvent('hit_person')}
+                >
+                  <MaterialCommunityIcons name="account-alert-outline" size={18} color="#EF5350" />
+                </TouchableOpacity>
+              </View>
+            )}
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {players.map(player => {
@@ -1024,6 +1094,15 @@ const styles = StyleSheet.create({
   scorecardTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   scorecardIcons: { flexDirection: 'row', gap: 8 },
   iconBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' },
+  throwEventActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
+  throwEventAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
   playerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
   playerMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },

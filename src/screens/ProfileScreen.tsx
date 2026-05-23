@@ -83,7 +83,11 @@ export function ProfileScreen({ route, navigation }: any) {
     longestThrow: 0,
     bestRound: 'N/A',
     birdies: 0,
-    eagles: 0
+    eagles: 0,
+    treeHits: 0,
+    waterHits: 0,
+    obHits: 0,
+    hitPeople: 0,
   });
   const [recentPerformance, setRecentPerformance] = useState<{label: string, diff: number}[]>([]);
 
@@ -156,11 +160,19 @@ export function ProfileScreen({ route, navigation }: any) {
         .eq('matches.status', 'completed')
         .not('strokes', 'is', null)
         .order('created_at', { ascending: false });
+
+      const { data: throwEventData } = await supabase
+        .from('throw_events')
+        .select('event_type, matches!inner(status)')
+        .eq('player_id', profile.id)
+        .eq('matches.status', 'completed');
+
       const nextStats = buildProfileStats({
         roundsCount: roundsCount || 0,
         bestRoundData: bestRoundData || [],
         scoresData: scoresData || [],
         throwData: throwData || [],
+        throwEventData: throwEventData || [],
       });
 
       setStats({
@@ -173,6 +185,10 @@ export function ProfileScreen({ route, navigation }: any) {
         bestRound: nextStats.bestRound,
         birdies: nextStats.birdies,
         eagles: nextStats.eagles,
+        treeHits: nextStats.treeHits,
+        waterHits: nextStats.waterHits,
+        obHits: nextStats.obHits,
+        hitPeople: nextStats.hitPeople,
       });
       setRecentPerformance(nextStats.recentPerformance);
 
@@ -259,6 +275,40 @@ export function ProfileScreen({ route, navigation }: any) {
               <Text style={styles.statLabel}>EAGLES+</Text>
             </View>
             <Text style={styles.statValue}>{stats.eagles}</Text>
+          </View>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="tree" size={16} color="#2E7D32" />
+              <Text style={styles.statLabel}>TREE</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.treeHits}</Text>
+          </View>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="waves" size={16} color="#1E88E5" />
+              <Text style={styles.statLabel}>WATER</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.waterHits}</Text>
+          </View>
+        </View>
+
+        <View style={styles.statsGrid}>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="alert-octagon-outline" size={16} color="#FF7043" />
+              <Text style={styles.statLabel}>OB</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.obHits}</Text>
+          </View>
+          <View style={styles.statCardHalf}>
+            <View style={styles.statHeader}>
+              <MaterialCommunityIcons name="account-alert-outline" size={16} color="#EF5350" />
+              <Text style={styles.statLabel}>HIT PERSON</Text>
+            </View>
+            <Text style={styles.statValue}>{stats.hitPeople}</Text>
           </View>
         </View>
 
