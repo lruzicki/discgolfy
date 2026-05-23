@@ -105,4 +105,21 @@ describe('buildProfileStats', () => {
     expect(stats.obHits).toBe(1);
     expect(stats.hitPeople).toBe(1);
   });
+
+  it('excludes unplayable holes represented by null strokes from totals and best-hole stats', () => {
+    const stats = buildProfileStats({
+      roundsCount: 1,
+      bestRoundData: [],
+      scoresData: [
+        { strokes: 3, holes: { par: 3, hole_number: 1 }, matches: { status: 'completed' } },
+        { strokes: null, holes: { par: 4, hole_number: 2 }, matches: { status: 'completed' } },
+      ],
+      throwData: [],
+    });
+
+    expect(stats.totalThrows).toBe(3);
+    expect(stats.avgScore).toBe(0);
+    expect(stats.bestHole).toBe('Par');
+    expect(stats.bestHoleInfo).toBe('(Hole 1)');
+  });
 });

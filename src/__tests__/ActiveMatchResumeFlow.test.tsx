@@ -859,4 +859,86 @@ describe('Active Match resume guard', () => {
       });
     });
   });
+
+  it('marks current hole unplayable and sets skipped scores for all players', async () => {
+    const upsertScores = jest.fn(() => Promise.resolve({ error: null }));
+
+    mockSupabaseFrom.mockImplementation((table: string) => {
+      if (table === 'holes') {
+        return mockOrderedQuery({
+          data: [{
+            id: 'hole-1',
+            hole_number: 1,
+            par: 3,
+            distance_m: 100,
+            tee_latitude: 54,
+            tee_longitude: 18,
+            basket_latitude: 54.001,
+            basket_longitude: 18.001,
+          }],
+          error: null,
+        });
+      }
+
+      if (table === 'match_players') {
+        return mockEqQuery({
+          data: [
+            { player_id: 'player-1', profiles: { id: 'player-1', display_name: 'Alice' } },
+            { player_id: 'player-2', profiles: { id: 'player-2', display_name: 'Bob' } },
+          ],
+          error: null,
+        });
+      }
+
+      if (table === 'scores') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { hole_id: 'hole-1', player_id: 'player-1', strokes: 3 },
+                { hole_id: 'hole-1', player_id: 'player-2', strokes: 4 },
+              ],
+              error: null,
+            })),
+          })),
+          upsert: upsertScores,
+        };
+      }
+
+      if (table === 'throws' || table === 'discs') {
+        return mockEqChain({ data: [], error: null });
+      }
+
+      return mockEqQuery({ data: [], error: null });
+    });
+
+    useMatchStore.setState({
+      matchId: 'match-1',
+      layoutId: 'layout-1',
+    });
+
+    const screen = render(<ActiveMatchScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Scorecard')).toBeTruthy();
+      expect(screen.getByText('E (3)')).toBeTruthy();
+      expect(screen.getByText('+1 (4)')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByLabelText('Mark hole unplayable today'));
+
+    await waitFor(() => {
+      expect(useMatchStore.getState().scores['hole-1']).toEqual({
+        'player-1': null,
+        'player-2': null,
+      });
+      expect(upsertScores).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { match_id: 'match-1', hole_id: 'hole-1', player_id: 'player-1', strokes: null },
+          { match_id: 'match-1', hole_id: 'hole-1', player_id: 'player-2', strokes: null },
+        ]),
+        { onConflict: 'match_id,hole_id,player_id' },
+      );
+    });
+  });
 });

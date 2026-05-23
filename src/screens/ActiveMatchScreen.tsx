@@ -324,7 +324,14 @@ export const SummaryView = ({ holes, players, scores }: { holes: Hole[], players
               <Text style={styles.summaryLabel}>HOLE</Text>
             </View>
             {chunk.map(h => (
-              <View key={h.id} style={styles.summaryCell} testID={`summary-cell-hole-${h.id}`}>
+              <View
+                key={h.id}
+                style={[
+                  styles.summaryCell,
+                  players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null) && styles.unplayableSummaryCell,
+                ]}
+                testID={`summary-cell-hole-${h.id}`}
+              >
                 <Text style={styles.summaryHoleNum}>{h.hole_number}</Text>
               </View>
             ))}
@@ -350,13 +357,14 @@ export const SummaryView = ({ holes, players, scores }: { holes: Hole[], players
                 const strokes = scores[h.id]?.[player.id];
                 const diff = strokes ? strokes - h.par : null;
                 const scoreStyle = getScoreStyle(diff);
+                const isUnplayable = players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null);
                 return (
-                  <View key={h.id} style={[styles.summaryCell, scoreStyle]}>
+                  <View key={h.id} style={[styles.summaryCell, scoreStyle, isUnplayable && styles.unplayableSummaryCell]}>
                     <Text style={[
                       styles.summaryValue,
                       scoreStyle.color ? { color: scoreStyle.color } : { color: '#FFF' }
                     ]}>
-                      {strokes || '-'}
+                      {isUnplayable ? 'X' : (strokes || '-')}
                     </Text>
                   </View>
                 );
@@ -805,6 +813,14 @@ export function ActiveMatchScreen() {
     }
   };
 
+  const markCurrentHoleUnplayable = async () => {
+    if (!currentHole || players.length === 0) return;
+    players.forEach((player) => {
+      setScore(currentHole.id, player.id, null);
+    });
+    await triggerSync();
+  };
+
   if (loading || (activeItem?.type === 'hole' && !currentHole)) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -843,6 +859,13 @@ export function ActiveMatchScreen() {
             <View style={styles.scorecardHeader}>
               <Text style={styles.scorecardTitle}>Scorecard</Text>
               <View style={styles.scorecardIcons}>
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  accessibilityLabel="Mark hole unplayable today"
+                  onPress={markCurrentHoleUnplayable}
+                >
+                  <MaterialCommunityIcons name="close-octagon-outline" size={22} color={COLORS.textSecondary} />
+                </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.iconBtn, pendingThrow && { backgroundColor: COLORS.primary }]} 
                   onPress={!pendingThrow ? handleStartThrow : handleEndThrow}
@@ -909,30 +932,36 @@ export function ActiveMatchScreen() {
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {players.map(player => {
                 const strokes = scores[currentHole.id]?.[player.id];
+                const isHoleUnplayable = players.length > 0 && players.every((p) => scores[currentHole.id]?.[p.id] === null);
                 const scoreDiff = strokes ? strokes - currentHole.par : 0;
                 const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
 
                 return (
-                  <View key={player.id} style={styles.playerRow}>
+                  <View key={player.id} style={[styles.playerRow, isHoleUnplayable && styles.unplayableRow]}>
                     <View style={styles.playerMain}>
                       <View style={styles.playerAvatar}>
                         <Text style={styles.avatarTextSmall}>{player.display_name[0]}</Text>
                       </View>
                       <View style={styles.playerNameContainer}>
                         <Text style={styles.playerNameText}>{player.display_name}</Text>
-                        <Text style={[
-                          styles.playerScoreStatus,
-                          scoreDiff < 0 && styles.scoreUnder,
-                          scoreDiff > 0 && styles.scoreOver
-                        ]}>
-                          {scoreDiffText} ({strokes || 0})
-                        </Text>
+                        {isHoleUnplayable ? (
+                          <Text style={[styles.playerScoreStatus, styles.unplayableStatusText]}>UNPLAYABLE</Text>
+                        ) : (
+                          <Text style={[
+                            styles.playerScoreStatus,
+                            scoreDiff < 0 && styles.scoreUnder,
+                            scoreDiff > 0 && styles.scoreOver
+                          ]}>
+                            {scoreDiffText} ({strokes || 0})
+                          </Text>
+                        )}
                       </View>
                     </View>
 
                     <View style={styles.scoreControls}>
                       <TouchableOpacity 
                         style={styles.controlBtn}
+                        disabled={isHoleUnplayable}
                         onPress={() => decrementScore(currentHole.id, player.id, currentHole.par)}
                       >
                         <Ionicons name="remove" size={24} color={COLORS.text} />
@@ -944,6 +973,7 @@ export function ActiveMatchScreen() {
 
                       <TouchableOpacity 
                         style={[styles.controlBtn, styles.controlBtnAdd]}
+                        disabled={isHoleUnplayable}
                         onPress={() => incrementScore(currentHole.id, player.id, currentHole.par)}
                       >
                         <Ionicons name="add" size={24} color={COLORS.onPrimary} />
@@ -1286,6 +1316,7 @@ const styles = StyleSheet.create({
   summaryTable: { backgroundColor: 'transparent', marginBottom: 24 },
   summaryRow: { flexDirection: 'row', marginBottom: 2 },
   summaryCell: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 4, marginHorizontal: 1 },
+  unplayableSummaryCell: { backgroundColor: 'rgba(255,112,67,0.22)', borderWidth: 1, borderColor: 'rgba(255,112,67,0.5)' },
   summaryCellSticky: { flex: 2, alignItems: 'flex-start', paddingHorizontal: 4, backgroundColor: 'transparent', marginRight: 8 },
 
   summaryLabel: { color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
@@ -1293,6 +1324,8 @@ const styles = StyleSheet.create({
   summaryHoleNum: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '700' },
   summaryPar: { color: 'rgba(255,255,255,0.4)', fontSize: 14, fontWeight: '400' },
   summaryPlayerName: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  unplayableRow: { borderWidth: 1, borderColor: 'rgba(255,112,67,0.45)', borderRadius: 14 },
+  unplayableStatusText: { color: '#FFAB91', fontWeight: '800' },
   // Map Toggle
   mapToggle: { position: 'absolute', bottom: 12, right: 12, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
 });

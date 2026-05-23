@@ -57,4 +57,28 @@ describe('SummaryView', () => {
     expect(flattenedNormal.flex).toBe(1);
     expect(flattenedNormal.minWidth).toBeUndefined(); // We want to remove the minWidth constraint so it fits
   });
+
+  it('renders unplayable holes distinctly with X markers', () => {
+    const mockHoles = [{ id: 'h1', hole_number: 1, par: 3 }] as any[];
+    const mockPlayers = [
+      { id: 'p1', display_name: 'Player One' },
+      { id: 'p2', display_name: 'Player Two' },
+    ] as any[];
+    const mockScores = {
+      h1: {
+        p1: null,
+        p2: null,
+      },
+    };
+
+    const { getByTestId, getAllByText } = render(
+      <SummaryView holes={mockHoles} players={mockPlayers} scores={mockScores} />
+    );
+
+    const holeHeaderCell = getByTestId('summary-cell-hole-h1');
+    const flattenedHeader = StyleSheet.flatten(holeHeaderCell.props.style);
+
+    expect(getAllByText('X')).toHaveLength(2);
+    expect(flattenedHeader.borderWidth).toBe(1);
+  });
 });
