@@ -14,6 +14,9 @@ jest.mock('@expo/vector-icons', () => ({
 // Mock supabase
 jest.mock('../lib/supabase', () => ({
   supabase: {
+    auth: {
+      getUser: jest.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+    },
     from: jest.fn((table) => {
       if (table === 'courses') {
         return {

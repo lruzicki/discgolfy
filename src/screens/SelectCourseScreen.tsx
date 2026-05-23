@@ -8,6 +8,8 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -131,9 +133,13 @@ export function SelectCourseScreen({ navigation }: any) {
   const [error, setError] = useState<string | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
+  const [isModerator, setIsModerator] = useState(false);
+  const [newLayoutName, setNewLayoutName] = useState('');
+  const [editableHole, setEditableHole] = useState<any | null>(null);
   const { setCourse, setLayout } = useMatchStore();
 
   useEffect(() => {
+    fetchModeratorStatus();
     fetchCourses();
   }, []);
 
@@ -147,6 +153,25 @@ export function SelectCourseScreen({ navigation }: any) {
       }
     }
   }, [selectedCourseId]);
+
+  useEffect(() => {
+    if (isModerator && selectedLayoutId) {
+      fetchEditableHole(selectedLayoutId);
+    }
+  }, [isModerator, selectedLayoutId]);
+
+  const fetchModeratorStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('is_moderator')
+      .eq('auth_id', user.id)
+      .single();
+
+    setIsModerator(Boolean(data?.is_moderator));
+  };
 
   const fetchCourses = async () => {
     try {
@@ -199,6 +224,79 @@ export function SelectCourseScreen({ navigation }: any) {
     }
   };
 
+  const addLayout = async () => {
+    if (!selectedCourseId || !newLayoutName.trim()) return;
+
+    const { error } = await supabase.from('layouts').insert({
+      course_id: selectedCourseId,
+      name: newLayoutName.trim(),
+      hole_count: 0,
+    });
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setNewLayoutName('');
+    await fetchLayouts(selectedCourseId);
+  };
+
+  const fetchEditableHole = async (layoutId: string) => {
+    const { data } = await supabase
+      .from('holes')
+      .select('id, layout_id, hole_number, par, tee_latitude, tee_longitude, basket_latitude, basket_longitude')
+      .eq('layout_id', layoutId);
+
+    setEditableHole(data && data.length > 0 ? data[0] : null);
+  };
+
+  const saveHole = async () => {
+    if (!editableHole?.id) return;
+
+    const { error } = await supabase
+      .from('holes')
+      .update({
+        par: Number(editableHole.par),
+        tee_latitude: Number(editableHole.tee_latitude),
+        tee_longitude: Number(editableHole.tee_longitude),
+        basket_latitude: Number(editableHole.basket_latitude),
+        basket_longitude: Number(editableHole.basket_longitude),
+      })
+      .eq('id', editableHole.id);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const addHoleToLayout = async () => {
+    if (!selectedLayoutId) return;
+    const nextHoleNumber = editableHole?.hole_number ? Number(editableHole.hole_number) + 1 : 1;
+    const { error } = await supabase.from('holes').insert({
+      layout_id: selectedLayoutId,
+      hole_number: nextHoleNumber,
+      par: 3,
+      tee_latitude: 0,
+      tee_longitude: 0,
+      basket_latitude: 0,
+      basket_longitude: 0,
+    });
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    await fetchEditableHole(selectedLayoutId);
+  };
+
+  const removeEditableHole = async () => {
+    if (!editableHole?.id || !selectedLayoutId) return;
+    const { error } = await supabase.from('holes').delete().eq('id', editableHole.id);
+    if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    await fetchEditableHole(selectedLayoutId);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" />
@@ -230,6 +328,48 @@ export function SelectCourseScreen({ navigation }: any) {
                 onPlay={handlePlay}
               />
             ))}
+            {isModerator && selectedCourseId && (
+              <View style={styles.moderatorCard}>
+                <Text style={styles.selectLayoutLabel}>Manage Layouts</Text>
+                <TextInput
+                  placeholder="New layout name"
+                  placeholderTextColor={COLORS.textSecondary}
+                  style={styles.moderatorInput}
+                  value={newLayoutName}
+                  onChangeText={setNewLayoutName}
+                />
+                <TouchableOpacity style={styles.moderatorButton} onPress={addLayout}>
+                  <Text style={styles.moderatorButtonText}>Add Layout</Text>
+                </TouchableOpacity>
+                {editableHole && (
+                  <View style={styles.holeEditor}>
+                    <TextInput
+                      placeholder="Par"
+                      placeholderTextColor={COLORS.textSecondary}
+                      style={styles.moderatorInput}
+                      value={String(editableHole.par ?? '')}
+                      onChangeText={(value) => setEditableHole((prev: any) => ({ ...prev, par: value }))}
+                    />
+                    <TextInput
+                      placeholder="Tee lat"
+                      placeholderTextColor={COLORS.textSecondary}
+                      style={styles.moderatorInput}
+                      value={String(editableHole.tee_latitude ?? '')}
+                      onChangeText={(value) => setEditableHole((prev: any) => ({ ...prev, tee_latitude: value }))}
+                    />
+                    <TouchableOpacity style={styles.moderatorButton} onPress={saveHole}>
+                      <Text style={styles.moderatorButtonText}>Save Hole</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.moderatorButton} onPress={addHoleToLayout}>
+                      <Text style={styles.moderatorButtonText}>Add Hole</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.moderatorDangerButton} onPress={removeEditableHole}>
+                      <Text style={styles.moderatorDangerButtonText}>Remove Hole</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -401,5 +541,46 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 16,
   },
+  moderatorCard: {
+    marginTop: 12,
+    backgroundColor: '#22242A',
+    borderRadius: 14,
+    padding: 12,
+  },
+  moderatorInput: {
+    borderWidth: 1,
+    borderColor: '#3A3D45',
+    borderRadius: 10,
+    color: COLORS.text,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  moderatorButton: {
+    marginTop: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  moderatorButtonText: {
+    color: '#111',
+    fontWeight: '700',
+  },
+  holeEditor: {
+    marginTop: 8,
+  },
+  moderatorDangerButton: {
+    marginTop: 8,
+    backgroundColor: '#4A1F24',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#A33B47',
+  },
+  moderatorDangerButtonText: {
+    color: '#FF8D99',
+    fontWeight: '700',
+  },
 });
-
