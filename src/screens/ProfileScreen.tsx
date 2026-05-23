@@ -7,6 +7,7 @@ import { Svg, Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg'
 import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { buildProfileStats } from '../services/profileStats';
+import { Avatar } from '../components/Avatar';
 
 function RecentPerformanceChart({ data }: { data: { label: string, diff: number }[] }) {
   if (data.length === 0) return null;
@@ -73,6 +74,7 @@ function RecentPerformanceChart({ data }: { data: { label: string, diff: number 
 export function ProfileScreen({ route, navigation }: any) {
   const [displayName, setDisplayName] = useState('Player');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     roundsPlayed: 0,
@@ -114,6 +116,7 @@ export function ProfileScreen({ route, navigation }: any) {
       if (!profile) return;
       setDisplayName(profile.display_name);
       setAvatarUrl(profile.avatar_url);
+      setProfileId(profile.id);
 
       // 1. Fetch Rounds Played
       const { count: roundsCount } = await supabase
@@ -240,10 +243,14 @@ export function ProfileScreen({ route, navigation }: any) {
         {/* Profile Header */}
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
-            <Image 
-              source={{ uri: avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop' }} 
-              style={styles.avatar} 
-            />
+            {profileId ? (
+              <Avatar userId={profileId} name={displayName} avatarUrl={avatarUrl} size={100} />
+            ) : (
+              <Image 
+                source={{ uri: avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200&auto=format&fit=crop' }} 
+                style={styles.avatar} 
+              />
+            )}
             <View style={styles.onlineBadge} />
           </View>
           <Text style={styles.name}>{displayName}</Text>
