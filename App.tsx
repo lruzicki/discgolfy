@@ -14,6 +14,7 @@ import { MatchSummaryScreen } from './src/screens/MatchSummaryScreen';
 import { PlayScreen } from './src/screens/PlayScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { MatchHistoryScreen } from './src/screens/MatchHistoryScreen';
+import { LongestThrowsScreen } from './src/screens/LongestThrowsScreen';
 import { EditProfileScreen } from './src/screens/EditProfileScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';

@@ -358,6 +358,14 @@ export function ProfileScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.actionGrid}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('LongestThrows')}>
+            <MaterialCommunityIcons name="arrow-up-right-bold" size={20} color={COLORS.textSecondary} />
+            <Text style={styles.actionText}>LONGEST THROWS</Text>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} style={styles.actionArrow} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.actionGrid}>
           <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('Bag')}>
             <Ionicons name="bag-handle-outline" size={20} color={COLORS.textSecondary} />
             <Text style={styles.actionText}>BAG</Text>
