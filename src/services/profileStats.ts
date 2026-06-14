@@ -1,4 +1,5 @@
 import { ThrowEventType } from '../constants/throwEvents';
+import { averageDiffPerPlayedHole } from './scoreRankings';
 
 export interface MatchSummaryRow {
   total_score: number | null;
@@ -55,7 +56,7 @@ export function buildProfileStats(input: {
   throwEventData?: ThrowEventRow[];
 }): ProfileStatsResult {
   const completedScores = (input.scoresData || []).filter(
-    (s) => isCompleted(s.matches?.status) && s.strokes !== null
+    (s): s is ScoreRow & { strokes: number } => isCompleted(s.matches?.status) && s.strokes !== null
   );
   const completedThrows = (input.throwData || []).filter((t) => isCompleted(t.matches?.status));
   const completedThrowEvents = (input.throwEventData || []).filter((e) => isCompleted(e.matches?.status));
@@ -134,7 +135,7 @@ export function buildProfileStats(input: {
 
   return {
     roundsPlayed: input.roundsCount || 0,
-    avgScore: completedScores.length > 0 ? (totalStrokes - totalPar) / (input.roundsCount || 1) : 0,
+    avgScore: averageDiffPerPlayedHole(totalStrokes - totalPar, completedScores.length),
     bestHole: bestHoleStr,
     bestHoleInfo: bestHoleDetails,
     totalThrows: totalStrokes,
