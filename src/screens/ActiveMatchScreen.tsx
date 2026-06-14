@@ -54,6 +54,14 @@ interface PendingThrow {
   startLng: number;
 }
 
+interface MeasuredThrowResult {
+  distance: number;
+  start: { lat: number; lng: number };
+  end: { lat: number; lng: number };
+}
+
+type CompletedThrowLine = Pick<MeasuredThrowResult, 'start' | 'end'>;
+
 interface ThrowRecord {
   id: string;
   throw_number: number;
@@ -214,8 +222,9 @@ const MATCH_MAP_HTML = `
             playerMarker = removeLayer(playerMarker);
           }
 
-          if (hasPoint(state.throwStart) && hasPoint(state.playerPos)) {
-            const throwPoints = [[state.throwStart.lat, state.throwStart.lng], [state.playerPos.lat, state.playerPos.lng]];
+          const throwEnd = hasPoint(state.throwEnd) ? state.throwEnd : state.playerPos;
+          if (hasPoint(state.throwStart) && hasPoint(throwEnd)) {
+            const throwPoints = [[state.throwStart.lat, state.throwStart.lng], [throwEnd.lat, throwEnd.lng]];
             if (!throwLine) {
               throwLine = L.polyline(throwPoints, {
                 color: '#FF5252',
@@ -232,6 +241,7 @@ const MATCH_MAP_HTML = `
           const bounds = L.latLngBounds(linePoints);
           if (hasPoint(state.playerPos)) bounds.extend([state.playerPos.lat, state.playerPos.lng]);
           if (hasPoint(state.throwStart)) bounds.extend([state.throwStart.lat, state.throwStart.lng]);
+          if (hasPoint(state.throwEnd)) bounds.extend([state.throwEnd.lat, state.throwEnd.lng]);
           map.fitBounds(bounds, { padding: [40, 40] });
         };
 
@@ -243,11 +253,12 @@ const MATCH_MAP_HTML = `
   </html>
 `;
 
-const MapComponent = ({ hole, isRecording, playerPos, throwStart }: { 
+const MapComponent = ({ hole, isRecording, playerPos, throwStart, throwEnd }: { 
   hole: Hole | null, 
   isRecording: boolean,
   playerPos: { lat: number, lng: number } | null,
-  throwStart: { lat: number, lng: number } | null
+  throwStart: { lat: number, lng: number } | null,
+  throwEnd?: { lat: number, lng: number } | null
 }) => {
   const [isSatellite, setIsSatellite] = useState(true);
   const mapRef = useRef<any>(null);
@@ -266,7 +277,8 @@ const MapComponent = ({ hole, isRecording, playerPos, throwStart }: {
     basket: { lat: basketLat, lng: basketLng },
     playerPos,
     throwStart,
-  }), [basketLat, basketLng, isRecording, isSatellite, playerPos, teeLat, teeLng, throwStart]);
+    throwEnd,
+  }), [basketLat, basketLng, isRecording, isSatellite, playerPos, teeLat, teeLng, throwEnd, throwStart]);
 
   const updateMapScript = useMemo(() => {
     if (!hole) return '';
@@ -319,7 +331,9 @@ export function ActiveMatchScreen() {
     incrementScore,
     decrementScore,
     setScore,
+    clearScore,
     hydrateScores,
+    applyRemoteScore,
     triggerSync,
     isSyncing
   } = useMatchStore();
@@ -336,6 +350,9 @@ export function ActiveMatchScreen() {
   const [isThrowHistoryVisible, setIsThrowHistoryVisible] = useState(false);
   const [selectedThrowType, setSelectedThrowType] = useState<ThrowType | null>(null);
   const [playerPos, setPlayerPos] = useState<{lat: number, lng: number} | null>(null);
+  const [measuredThrowResult, setMeasuredThrowResult] = useState<MeasuredThrowResult | null>(null);
+  const [completedThrowLine, setCompletedThrowLine] = useState<CompletedThrowLine | null>(null);
+  const [isCreator, setIsCreator] = useState(true);
   const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
   const [holeEvents, setHoleEvents] = useState<Record<string, number>>({});
   const [unplayableScoreSnapshots, setUnplayableScoreSnapshots] = useState<Record<string, Record<string, number | null | undefined>>>({});
@@ -396,14 +413,43 @@ export function ActiveMatchScreen() {
     fetchDiscs();
 
     const subscription = AppState.addEventListener('change', nextAppState => {
-      if (appState.current.match(/active/) && nextAppState === 'background') {
+      if (isCreator && appState.current.match(/active/) && nextAppState === 'background') {
         triggerSync();
       }
       appState.current = nextAppState;
     });
 
     return () => subscription.remove();
-  }, [matchId, layoutId]);
+  }, [matchId, layoutId, isCreator]);
+
+  useEffect(() => {
+    if (!matchId) return;
+
+    const channel = supabase
+      .channel(`match-scores:${matchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'scores',
+          filter: `match_id=eq.${matchId}`,
+        },
+        (payload: any) => {
+          if (!payload?.new?.hole_id || !payload?.new?.player_id) return;
+          applyRemoteScore({
+            hole_id: payload.new.hole_id,
+            player_id: payload.new.player_id,
+            strokes: payload.new.strokes ?? null,
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [applyRemoteScore, matchId]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -427,7 +473,7 @@ export function ActiveMatchScreen() {
   );
 
   const fetchThrowsForHole = async () => {
-    if (!currentHole || !matchId) return;
+    if (!isCreator || !currentHole || !matchId) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !user.id) return;
@@ -499,7 +545,7 @@ export function ActiveMatchScreen() {
 };
 
 const fetchEventsForHole = async () => {
-  if (!currentHole || !matchId) return;
+  if (!isCreator || !currentHole || !matchId) return;
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !user.id) return;
@@ -511,12 +557,18 @@ const fetchEventsForHole = async () => {
       .single();
     if (!profile || !profile.id) return;
 
-    const { data, error } = await supabase
-      .from('throw_events')
-      .select('event_type')
-      .eq('match_id', matchId)
-      .eq('hole_id', currentHole.id)
-      .eq('player_id', profile.id);
+    let eventsQuery: any = supabase.from('throw_events');
+    if (typeof eventsQuery.select !== 'function') return;
+    eventsQuery = eventsQuery.select('event_type');
+    if (typeof eventsQuery.eq !== 'function') return;
+    eventsQuery = eventsQuery.eq('match_id', matchId);
+    if (typeof eventsQuery.eq !== 'function') return;
+    eventsQuery = eventsQuery.eq('hole_id', currentHole.id);
+    if (typeof eventsQuery.eq !== 'function') return;
+    eventsQuery = eventsQuery.eq('player_id', profile.id);
+    if (typeof (eventsQuery as any).then !== 'function') return;
+
+    const { data, error } = await (eventsQuery as any);
 
     if (error) throw error;
 
@@ -544,6 +596,37 @@ const fetchEventsForHole = async () => {
     }
     try {
       setLoading(true);
+      let currentProfileId: string | null = null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const profileQuery = supabase
+          .from('profiles')
+          .select('id')
+          .eq('auth_id', user.id);
+        if (typeof (profileQuery as any).single === 'function') {
+          const profileResult = await (profileQuery as any).single();
+          currentProfileId = profileResult.data?.id ?? null;
+        }
+      }
+
+      let matchOwnerId: string | null = null;
+      let matchStatus: string | null = null;
+      if (currentProfileId) {
+        const matchQuery = supabase
+          .from('matches')
+          .select('created_by, status')
+          .eq('id', matchId);
+        if (typeof (matchQuery as any).single === 'function') {
+          const { data: matchData, error: matchError } = await (matchQuery as any).single();
+          if (matchError) throw matchError;
+          matchOwnerId = matchData?.created_by ?? null;
+          matchStatus = matchData?.status ?? null;
+          setIsCreator(matchOwnerId === currentProfileId);
+        }
+      } else {
+        setIsCreator(true);
+      }
+
       const { data: holeData, error: holeError } = await supabase
         .from('holes')
         .select('*')
@@ -570,6 +653,16 @@ const fetchEventsForHole = async () => {
       }));
       setPlayers(mappedPlayers);
 
+      const currentPlayerCanWatch = !currentProfileId
+        || matchOwnerId === currentProfileId
+        || mappedPlayers.some((player) => player.id === currentProfileId);
+
+      if (matchStatus === 'active' && !currentPlayerCanWatch) {
+        Alert.alert('Access denied', 'Only Match participants can watch this active Match.');
+        navigation.navigate('Play');
+        return;
+      }
+
       const { data: scoreData, error: scoreError } = await supabase
         .from('scores')
         .select('hole_id, player_id, strokes')
@@ -592,18 +685,24 @@ const fetchEventsForHole = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !user.id) return;
-      const { data: profile } = await supabase
+      const profileQuery = supabase
         .from('profiles')
         .select('id')
-        .eq('auth_id', user.id)
-        .single();
+        .eq('auth_id', user.id);
+      if (typeof (profileQuery as any).single !== 'function') return;
+      const { data: profile } = await (profileQuery as any).single();
       if (!profile || !profile.id) return;
 
-      const { data } = await supabase
-        .from('discs')
-        .select('id, name, color_rgba')
-        .eq('player_id', profile.id)
-        .is('archived_at', null);
+      let discsQuery: any = supabase.from('discs');
+      if (typeof discsQuery.select !== 'function') return;
+      discsQuery = discsQuery.select('id, name, color_rgba');
+      if (typeof discsQuery.eq !== 'function') return;
+      discsQuery = discsQuery.eq('player_id', profile.id);
+      if (typeof discsQuery.is !== 'function') return;
+      discsQuery = discsQuery.is('archived_at', null);
+      if (typeof (discsQuery as any).then !== 'function') return;
+
+      const { data } = await (discsQuery as any);
       setDiscs(data || []);
     } catch (error) {
       console.error('Error fetching discs:', error);
@@ -611,6 +710,7 @@ const fetchEventsForHole = async () => {
   };
 
   const handleStartThrow = async () => {
+    if (!isCreator) return;
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -618,6 +718,8 @@ const fetchEventsForHole = async () => {
         return;
       }
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setMeasuredThrowResult(null);
+      setCompletedThrowLine(null);
       setPendingThrow({
         startLat: location.coords.latitude,
         startLng: location.coords.longitude,
@@ -628,6 +730,7 @@ const fetchEventsForHole = async () => {
   };
 
   const handleEndThrow = async () => {
+    if (!isCreator) return;
     if (!pendingThrow) return;
     try {
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -643,6 +746,7 @@ const fetchEventsForHole = async () => {
   };
 
   const recordMeasuredThrow = async (discId: string | null) => {
+    if (!isCreator) return;
     if (!pendingThrow || !tempEndCoords || !currentHole) return;
     if (!selectedThrowType) {
       Alert.alert('Throw Type Required', 'Choose Shot or Putt before saving.');
@@ -701,6 +805,12 @@ const fetchEventsForHole = async () => {
           });
         if (legacyInsert.error) throw legacyInsert.error;
       }
+      const completedLine = {
+        start: { lat: pendingThrow.startLat, lng: pendingThrow.startLng },
+        end: { lat: tempEndCoords.lat, lng: tempEndCoords.lng },
+      };
+      setCompletedThrowLine(completedLine);
+      setMeasuredThrowResult({ distance, ...completedLine });
       setPendingThrow(null);
       setTempEndCoords(null);
       setSelectedThrowType(null);
@@ -712,6 +822,7 @@ const fetchEventsForHole = async () => {
   };
 
   const recordThrowEvent = async (eventType: ThrowEventType) => {
+    if (!isCreator) return;
     if (!currentHole || !matchId) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -770,7 +881,21 @@ const fetchEventsForHole = async () => {
     }
   };
 
-  const handleFinishMatch = async () => {
+  const hasUnplayedPlayableHoles = () => {
+    if (players.length === 0 || holes.length === 0) return false;
+
+    return holes.some((hole) => {
+      const holeScores = scores[hole.id] || {};
+      const isUnplayableToday = players.every((player) => holeScores[player.id] === null);
+
+      if (isUnplayableToday) return false;
+
+      return players.some((player) => holeScores[player.id] === null || holeScores[player.id] === undefined);
+    });
+  };
+
+  const finishMatch = async () => {
+    if (!isCreator) return;
     try {
       setLoading(true);
       await triggerSync();
@@ -806,7 +931,25 @@ const fetchEventsForHole = async () => {
     }
   };
 
+  const handleFinishMatch = () => {
+    if (!isCreator) return;
+    if (hasUnplayedPlayableHoles()) {
+      Alert.alert(
+        'Finish round?',
+        'Warning: not all holes have scores. Finish this round anyway?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Finish Round', style: 'destructive', onPress: finishMatch },
+        ],
+      );
+      return;
+    }
+
+    finishMatch();
+  };
+
   const markCurrentHoleUnplayable = async () => {
+    if (!isCreator) return;
     if (!currentHole || players.length === 0) return;
     const holeScores = scores[currentHole.id] || {};
     const isCurrentlyUnplayable = players.every((player) => holeScores[player.id] === null);
@@ -863,51 +1006,56 @@ const fetchEventsForHole = async () => {
             hole={currentHole} 
             isRecording={!!pendingThrow} 
             playerPos={playerPos}
-            throwStart={pendingThrow ? { lat: pendingThrow.startLat, lng: pendingThrow.startLng } : null}
+            throwStart={pendingThrow ? { lat: pendingThrow.startLat, lng: pendingThrow.startLng } : completedThrowLine?.start || null}
+            throwEnd={pendingThrow ? null : completedThrowLine?.end || null}
           />
 
           <View style={styles.scorecardContainer}>
             <View style={styles.scorecardHeader}>
               <Text style={styles.scorecardTitle}>Scorecard</Text>
-              <View style={styles.scorecardIcons}>
-                <TouchableOpacity
-                  style={styles.iconBtn}
-                  accessibilityLabel="Mark hole unplayable today"
-                  onPress={markCurrentHoleUnplayable}
-                >
-                  <MaterialCommunityIcons name="close-octagon-outline" size={22} color={COLORS.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.iconBtn, pendingThrow && { backgroundColor: COLORS.primary }]} 
-                  onPress={!pendingThrow ? handleStartThrow : handleEndThrow}
-                >
-                  <MaterialCommunityIcons 
-                    name={!pendingThrow ? "ruler" : "stop-circle"} 
-                    size={22} 
-                    color={pendingThrow ? COLORS.onPrimary : COLORS.textSecondary} 
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.iconBtn}
-                  onPress={() => setIsThrowHistoryVisible(true)}
-                >
-                  <MaterialCommunityIcons name="history" size={22} color={COLORS.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.iconBtn, isEventActionsVisible && { backgroundColor: COLORS.primary }]}
-                  accessibilityLabel="Open throw events"
-                  onPress={() => setIsEventActionsVisible((current) => !current)}
-                >
-                  <MaterialCommunityIcons
-                    name="alert-circle-outline"
-                    size={22}
-                    color={isEventActionsVisible ? COLORS.onPrimary : COLORS.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
+              {isCreator ? (
+                <View style={styles.scorecardIcons}>
+                  <TouchableOpacity
+                    style={styles.iconBtn}
+                    accessibilityLabel="Mark hole unplayable today"
+                    onPress={markCurrentHoleUnplayable}
+                  >
+                    <MaterialCommunityIcons name="close-octagon-outline" size={22} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.iconBtn, pendingThrow && { backgroundColor: COLORS.primary }]} 
+                    onPress={!pendingThrow ? handleStartThrow : handleEndThrow}
+                  >
+                    <MaterialCommunityIcons 
+                      name={!pendingThrow ? "ruler" : "stop-circle"} 
+                      size={22} 
+                      color={pendingThrow ? COLORS.onPrimary : COLORS.textSecondary} 
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.iconBtn}
+                    onPress={() => setIsThrowHistoryVisible(true)}
+                  >
+                    <MaterialCommunityIcons name="history" size={22} color={COLORS.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.iconBtn, isEventActionsVisible && { backgroundColor: COLORS.primary }]}
+                    accessibilityLabel="Open throw events"
+                    onPress={() => setIsEventActionsVisible((current) => !current)}
+                  >
+                    <MaterialCommunityIcons
+                      name="alert-circle-outline"
+                      size={22}
+                      color={isEventActionsVisible ? COLORS.onPrimary : COLORS.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.watchModeText}>Watching live</Text>
+              )}
             </View>
 
-            {isEventActionsVisible && (
+            {isCreator && isEventActionsVisible && (
               <View style={styles.throwEventActions}>
                 <TouchableOpacity
                   style={[styles.throwEventAction, (holeEvents['tree'] || 0) > 0 && { backgroundColor: '#2E7D32' }]}
@@ -995,7 +1143,8 @@ const fetchEventsForHole = async () => {
                       </View>
                     </View>
 
-                    <View style={styles.scoreControls}>
+                    {isCreator ? (
+                      <View style={styles.scoreControls}>
                       <TouchableOpacity 
                         style={styles.controlBtn}
                         disabled={isHoleUnplayable}
@@ -1015,7 +1164,24 @@ const fetchEventsForHole = async () => {
                       >
                         <Ionicons name="add" size={24} color={COLORS.onPrimary} />
                       </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.clearScoreBtn}
+                        accessibilityLabel={`Clear ${player.display_name} score for hole ${currentHole.hole_number}`}
+                        disabled={isHoleUnplayable || strokes === null || strokes === undefined}
+                        onPress={async () => {
+                          clearScore(currentHole.id, player.id);
+                          await triggerSync();
+                        }}
+                      >
+                        <MaterialCommunityIcons name="restore" size={18} color={COLORS.textSecondary} />
+                      </TouchableOpacity>
                     </View>
+                    ) : (
+                      <View style={styles.readOnlyScoreContainer}>
+                        <Text style={styles.currentScoreText}>{strokes || '-'}</Text>
+                      </View>
+                    )}
                   </View>
                 );
               })}
@@ -1039,7 +1205,7 @@ const fetchEventsForHole = async () => {
               key={i} 
               style={[styles.holeNavItem, i === activeNavItemIndex && styles.holeNavItemActive]}
               onPress={() => {
-                triggerSync();
+                if (isCreator) triggerSync();
                 setActiveNavItemIndex(i);
               }}
             >
@@ -1052,7 +1218,7 @@ const fetchEventsForHole = async () => {
         </ScrollView>
       </View>
 
-      <Modal visible={isThrowHistoryVisible} transparent animationType="slide">
+      <Modal visible={isCreator && isThrowHistoryVisible} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -1095,7 +1261,7 @@ const fetchEventsForHole = async () => {
         </View>
       </Modal>
 
-      <Modal visible={isDiscModalVisible} transparent animationType="fade">
+      <Modal visible={isCreator && isDiscModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Select Disc</Text>
@@ -1161,11 +1327,30 @@ const fetchEventsForHole = async () => {
         </View>
       </Modal>
 
-      <View style={styles.finishBar}>
-        <TouchableOpacity style={styles.finishMatchBtn} onPress={handleFinishMatch}>
-          <Text style={styles.finishMatchText}>FINISH ROUND</Text>
-        </TouchableOpacity>
-      </View>
+      <Modal visible={!!measuredThrowResult} transparent animationType="fade">
+        <View style={styles.resultModalOverlay}>
+          <View style={styles.resultModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Throw measured</Text>
+              <TouchableOpacity
+                accessibilityLabel="Close measured throw result"
+                onPress={() => setMeasuredThrowResult(null)}
+              >
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.resultDistance}>{measuredThrowResult?.distance}m</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {isCreator && (
+        <View style={styles.finishBar}>
+          <TouchableOpacity style={styles.finishMatchBtn} onPress={handleFinishMatch}>
+            <Text style={styles.finishMatchText}>FINISH ROUND</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1183,6 +1368,7 @@ const styles = StyleSheet.create({
   scorecardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 16 },
   scorecardTitle: { color: '#FFF', fontSize: 18, fontWeight: '600' },
   scorecardIcons: { flexDirection: 'row', gap: 8 },
+  watchModeText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '700' },
   iconBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' },
   throwEventActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingBottom: 12 },
   throwEventAction: {
@@ -1222,7 +1408,9 @@ const styles = StyleSheet.create({
   scoreControls: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   controlBtn: { width: 34, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
   controlBtnAdd: { backgroundColor: COLORS.primary },
+  clearScoreBtn: { width: 34, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', justifyContent: 'center', alignItems: 'center' },
   currentScoreContainer: { width: 18, alignItems: 'center' },
+  readOnlyScoreContainer: { minWidth: 34, height: 36, justifyContent: 'center', alignItems: 'center' },
   currentScoreText: { color: '#FFF', fontSize: 17, fontWeight: '600' },
   scoreUnder: { color: COLORS.success },
   scoreOver: { color: '#FF5252' },
@@ -1237,6 +1425,9 @@ const styles = StyleSheet.create({
   finishMatchText: { color: COLORS.primary, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' },
+  resultModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 24 },
+  resultModalContent: { backgroundColor: '#1C1C1E', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  resultDistance: { color: COLORS.primary, fontSize: 44, fontWeight: '800', marginTop: 16, textAlign: 'center' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   modalTitle: { color: '#FFF', fontSize: 19, fontWeight: '600' },
   modalSubTitle: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 20 },

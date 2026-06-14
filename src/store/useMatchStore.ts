@@ -25,7 +25,9 @@ interface MatchState {
   
   // Scoring actions
   setScore: (holeId: string, playerId: string, strokes: number | null) => void;
+  clearScore: (holeId: string, playerId: string) => void;
   hydrateScores: (scoreRows: Array<{ hole_id: string; player_id: string; strokes: number | null }>) => void;
+  applyRemoteScore: (scoreRow: { hole_id: string; player_id: string; strokes: number | null }) => void;
   incrementScore: (holeId: string, playerId: string, par: number) => void;
   decrementScore: (holeId: string, playerId: string, par: number) => void;
   
@@ -75,6 +77,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     });
   },
 
+  clearScore: (holeId, playerId) => {
+    get().setScore(holeId, playerId, null);
+  },
+
   hydrateScores: (scoreRows) => {
     const scores = scoreRows.reduce<Record<string, Record<string, number | null>>>((acc, row) => {
       acc[row.hole_id] = {
@@ -85,6 +91,18 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     }, {});
 
     set({ scores });
+  },
+
+  applyRemoteScore: ({ hole_id, player_id, strokes }) => {
+    set((state) => ({
+      scores: {
+        ...state.scores,
+        [hole_id]: {
+          ...(state.scores[hole_id] || {}),
+          [player_id]: strokes,
+        },
+      },
+    }));
   },
 
   incrementScore: (holeId, playerId, par) => {

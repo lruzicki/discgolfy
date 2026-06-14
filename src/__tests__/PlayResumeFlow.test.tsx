@@ -44,19 +44,21 @@ jest.mock('../lib/supabase', () => ({
         });
       }
 
-      if (table === 'matches') {
+      if (table === 'match_players') {
         return mockCreateQuery({
           data: [
             {
-              id: 'match-1',
-              layout_id: 'layout-1',
-              date_played: '2026-05-21',
-              status: 'active',
-              layouts: {
-                name: 'Main',
-                courses: { name: 'Park Reagana' },
+              matches: {
+                id: 'match-1',
+                layout_id: 'layout-1',
+                date_played: '2026-05-21',
+                status: 'active',
+                layouts: {
+                  name: 'Main',
+                  courses: { name: 'Park Reagana' },
+                },
+                match_players: [{ count: 2 }],
               },
-              match_players: [{ count: 2 }],
             },
           ],
           error: null,
@@ -86,5 +88,11 @@ describe('Play resume flow', () => {
       expect(state.layoutId).toBe('layout-1');
       expect(mockNavigate).toHaveBeenCalledWith('ActiveMatch');
     });
+  });
+
+  it('lists active Matches where the current Player participates but did not create the Match', async () => {
+    const { findByText } = render(<PlayScreen />);
+
+    expect(await findByText('Park Reagana')).toBeTruthy();
   });
 });

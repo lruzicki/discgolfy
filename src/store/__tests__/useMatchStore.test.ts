@@ -33,6 +33,25 @@ describe('useMatchStore', () => {
     });
   });
 
+  it('clears a player score back to unplayed and queues the null score for sync', () => {
+    const { setScore, clearScore } = useMatchStore.getState();
+
+    setScore('h1', 'p1', 4);
+    setScore('h1', 'p2', 5);
+    clearScore('h1', 'p1');
+
+    const state = useMatchStore.getState();
+    expect(state.scores['h1']).toEqual({
+      p1: null,
+      p2: 5,
+    });
+    expect(state.syncQueue['h1_p1']).toEqual({
+      holeId: 'h1',
+      playerId: 'p1',
+      strokes: null,
+    });
+  });
+
   it('sets course and layout', () => {
     const { setCourse, setLayout } = useMatchStore.getState();
     
@@ -73,5 +92,30 @@ describe('useMatchStore', () => {
         'player-1': 4,
       },
     });
+  });
+
+  it('applies live score updates without enqueueing creator sync work', () => {
+    useMatchStore.setState({
+      scores: {
+        'hole-1': {
+          'player-1': 3,
+        },
+      },
+      syncQueue: {},
+    });
+
+    useMatchStore.getState().applyRemoteScore({
+      hole_id: 'hole-1',
+      player_id: 'player-2',
+      strokes: 4,
+    });
+
+    expect(useMatchStore.getState().scores).toEqual({
+      'hole-1': {
+        'player-1': 3,
+        'player-2': 4,
+      },
+    });
+    expect(useMatchStore.getState().syncQueue).toEqual({});
   });
 });

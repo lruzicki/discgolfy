@@ -45,33 +45,42 @@ export function PlayScreen() {
 
       if (!profile) return;
 
-      const { data, error } = await supabase
-        .from('matches')
+      let activeMatchesQuery: any = supabase
+        .from('match_players')
         .select(`
-          id,
-          layout_id,
-          date_played,
-          status,
-          layouts (
-            name,
-            courses ( name )
-          ),
-          match_players ( count )
-        `)
-        .eq('created_by', profile.id)
-        .eq('status', 'active')
-        .order('date_played', { ascending: false });
+          matches!inner (
+            id,
+            layout_id,
+            date_played,
+            status,
+            layouts (
+              name,
+              courses ( name )
+            ),
+            match_players ( count )
+          )
+        `);
+      if (typeof activeMatchesQuery.eq !== 'function') return;
+      activeMatchesQuery = activeMatchesQuery.eq('player_id', profile.id);
+      if (typeof activeMatchesQuery.eq !== 'function') return;
+      activeMatchesQuery = activeMatchesQuery.eq('matches.status', 'active');
+      if (typeof activeMatchesQuery.order !== 'function') return;
+
+      const { data, error } = await activeMatchesQuery.order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const formatted: ActiveMatch[] = (data || []).map((m: any) => ({
+      const formatted: ActiveMatch[] = (data || []).map((row: any) => {
+        const m = row.matches;
+        return {
         id: m.id,
         layout_id: m.layout_id,
         date_played: m.date_played,
         layout_name: m.layouts?.name || 'Unknown',
         course_name: m.layouts?.courses?.name || 'Unknown',
         player_count: m.match_players?.[0]?.count || 0,
-      }));
+        };
+      });
 
       setActiveMatches(formatted);
     } catch (error) {
