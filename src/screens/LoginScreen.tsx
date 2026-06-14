@@ -8,6 +8,7 @@ import { COLORS, TYPOGRAPHY } from '../theme';
 export function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const emailRedirectTo = 'discgolfy://auth/callback';
 
   const handleLogin = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -24,6 +25,28 @@ export function LoginScreen({ navigation }: any) {
     if (data?.user) {
       // No explicit navigation needed; App.tsx switches the stack
     }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      Alert.alert('Missing Email', 'Enter your email address first.');
+      return;
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: {
+        emailRedirectTo,
+      },
+    });
+
+    if (error) {
+      Alert.alert('Resend Failed', error.message);
+      return;
+    }
+
+    Alert.alert('Email Sent', 'A new confirmation link has been sent.');
   };
 
   return (
@@ -68,6 +91,13 @@ export function LoginScreen({ navigation }: any) {
 
           <TouchableOpacity style={styles.button} onPress={handleLogin} activeOpacity={0.8}>
             <Text style={styles.buttonText}>Log In</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{ marginTop: 12, alignItems: 'center' }}
+            onPress={handleResendConfirmation}
+          >
+            <Text style={{ color: COLORS.primary, fontWeight: '600' }}>Resend confirmation email</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 

@@ -79,4 +79,26 @@ describe('ScorecardView', () => {
     expect(getAllByText('X')).toHaveLength(2);
     expect(flattenedHeader.borderWidth).toBe(1);
   });
+
+  it('renders a cleared player score as blank without marking the whole hole unplayable', () => {
+    const mockHoles = [{ id: 'h1', hole_number: 1, par: 3 }] as any[];
+    const mockPlayers = [
+      { id: 'p1', display_name: 'Player One' },
+      { id: 'p2', display_name: 'Player Two' },
+    ] as any[];
+    const mockScores = {
+      h1: {
+        p1: null,
+        p2: 4,
+      },
+    };
+
+    const { getByText, queryByText } = render(
+      <ScorecardView holes={mockHoles} players={mockPlayers} scores={mockScores} showLeaderboard={false} />
+    );
+
+    expect(getByText('-')).toBeTruthy();
+    expect(getByText('4')).toBeTruthy();
+    expect(queryByText('X')).toBeNull();
+  });
 });

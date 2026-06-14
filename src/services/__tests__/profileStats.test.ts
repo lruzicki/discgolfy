@@ -85,6 +85,28 @@ describe('buildProfileStats', () => {
     expect(stats.recentPerformance).toEqual([{ label: '10/5', diff: 0 }]);
   });
 
+  it('computes average score per played hole across mixed round lengths', () => {
+    const stats = buildProfileStats({
+      roundsCount: 2,
+      bestRoundData: [],
+      scoresData: [
+        { strokes: 4, holes: { par: 3, hole_number: 1 }, matches: { status: 'completed' } },
+        { strokes: 4, holes: { par: 3, hole_number: 2 }, matches: { status: 'completed' } },
+        { strokes: 4, holes: { par: 3, hole_number: 3 }, matches: { status: 'completed' } },
+        { strokes: 4, holes: { par: 3, hole_number: 4 }, matches: { status: 'completed' } },
+        { strokes: 4, holes: { par: 3, hole_number: 5 }, matches: { status: 'completed' } },
+        ...Array.from({ length: 18 }, (_, index) => ({
+          strokes: index < 9 ? 4 : 3,
+          holes: { par: 3, hole_number: index + 1 },
+          matches: { status: 'completed' },
+        })),
+      ],
+      throwData: [],
+    });
+
+    expect(stats.avgScore).toBeCloseTo(14 / 23);
+  });
+
   it('counts throw events from completed matches only', () => {
     const stats = buildProfileStats({
       roundsCount: 1,
@@ -121,5 +143,20 @@ describe('buildProfileStats', () => {
     expect(stats.avgScore).toBe(0);
     expect(stats.bestHole).toBe('Par');
     expect(stats.bestHoleInfo).toBe('(Hole 1)');
+  });
+
+  it('excludes cleared hole scores represented by null strokes from averages', () => {
+    const stats = buildProfileStats({
+      roundsCount: 1,
+      bestRoundData: [],
+      scoresData: [
+        { strokes: 3, holes: { par: 3, hole_number: 1 }, matches: { status: 'completed' } },
+        { strokes: null, holes: { par: 5, hole_number: 2 }, matches: { status: 'completed' } },
+      ],
+      throwData: [],
+    });
+
+    expect(stats.totalThrows).toBe(3);
+    expect(stats.avgScore).toBe(0);
   });
 });

@@ -9,12 +9,14 @@ export function RegisterScreen({ navigation }: any) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const emailRedirectTo = 'discgolfy://auth/callback';
 
   const handleRegister = async () => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo,
         data: {
           full_name: fullName,
         },
