@@ -21,7 +21,7 @@ import { ModeratorCourseDetailsScreen } from './src/screens/ModeratorCourseDetai
 import { ModeratorLayoutDetailsScreen } from './src/screens/ModeratorLayoutDetailsScreen';
 import { supabase } from './src/lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { StatusBar, ActivityIndicator, View } from 'react-native';
+import { StatusBar, ActivityIndicator, View, Linking, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLORS } from './src/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -123,6 +123,48 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const handleIncomingUrl = async (url: string) => {
+      try {
+        const parsed = new URL(url);
+        const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
+        const hashParams = new URLSearchParams(hash);
+        const searchParams = parsed.searchParams;
+
+        const accessToken = hashParams.get('access_token') ?? searchParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token') ?? searchParams.get('refresh_token');
+        const errorDescription =
+          hashParams.get('error_description') ?? searchParams.get('error_description');
+
+        if (errorDescription) {
+          Alert.alert('Verification Failed', decodeURIComponent(errorDescription));
+          return;
+        }
+
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            Alert.alert('Session Error', error.message);
+          }
+        }
+      } catch {
+        // Ignore non-auth deep links
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleIncomingUrl(url);
+      }
+    });
+
+    const linkSubscription = Linking.addEventListener('url', ({ url }) => {
+      handleIncomingUrl(url);
+    });
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -132,7 +174,10 @@ export default function App() {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      linkSubscription.remove();
+    };
   }, []);
 
   if (loading) {
