@@ -6,6 +6,15 @@ import { ModeratorCourseDetailsScreen } from '../screens/ModeratorCourseDetailsS
 import { ModeratorLayoutDetailsScreen } from '../screens/ModeratorLayoutDetailsScreen';
 import { Pressable, View } from 'react-native';
 
+jest.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  getCurrentPositionAsync: jest.fn(async () => ({ coords: { latitude: 54.4, longitude: 18.6 } })),
+  watchPositionAsync: jest.fn(async () => {
+    return { remove: jest.fn() };
+  }),
+}));
+
 jest.mock('@expo/vector-icons', () => ({
   Ionicons: 'Ionicons',
   MaterialCommunityIcons: 'MaterialCommunityIcons',
@@ -134,16 +143,7 @@ jest.mock('../lib/supabase', () => ({
       if (table === 'layout_holes') {
         return {
           select: jest.fn(() => ({
-            eq: jest.fn((field: string, value: string) => {
-              const all = [{ id: 'lh1', layout_id: 'l1', course_hole_id: 'ch1', position: 1 }];
-              if (field === 'layout_id') {
-                return Promise.resolve({ data: all.filter((row) => row.layout_id === value), error: null });
-              }
-              if (field === 'course_hole_id') {
-                return Promise.resolve({ data: all.filter((row) => row.course_hole_id === value), error: null });
-              }
-              return Promise.resolve({ data: [], error: null });
-            })
+            eq: jest.fn(() => mockLayoutHolesSelect())
           })),
           insert: mockLayoutHolesInsert,
           update: mockLayoutHolesUpdate,
@@ -299,17 +299,21 @@ describe('ModeratorLayoutManagementFlow', () => {
     });
 
     it('lets the moderator edit a reusable course hole on a real map surface', async () => {
-      const { findByText, findAllByPlaceholderText, findByTestId } = render(
+      const { findByText, findAllByPlaceholderText, findByTestId, findAllByText } = render(
         <ModeratorCourseDetailsScreen navigation={mockNavigation} route={route} />
       );
 
       await findByText('COURSE HOLE POOL');
       fireEvent.press(await findByTestId('course-hole-chip-ch1'));
       fireEvent.changeText((await findAllByPlaceholderText('Hole Number'))[1], '1');
+      fireEvent.press(await findByText('Open Fullscreen Map'));
       fireEvent.press(await findByTestId('course-hole-map-picker-ch1-map'), {
         nativeEvent: { coordinate: { latitude: 54.35, longitude: 18.65 } },
       });
-      fireEvent.press(await findByText('Basket'));
+      fireEvent.press(await findByTestId('course-hole-map-picker-ch1-map'), {
+        nativeEvent: { coordinate: { latitude: 54.35, longitude: 18.65 } },
+      });
+      fireEvent.press((await findAllByText('Basket'))[0]);
       fireEvent.press(await findByTestId('course-hole-map-picker-ch1-map'), {
         nativeEvent: { coordinate: { latitude: 54.351, longitude: 18.651 } },
       });
@@ -371,20 +375,22 @@ describe('ModeratorLayoutManagementFlow', () => {
     });
 
     it('allows map-first tee and basket coordinate correction on the canonical course hole', async () => {
-      const { findByText, findByTestId } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
+      const { findByText, findByTestId, findAllByText } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
 
       await findByText('MAP EDITOR');
+      fireEvent.press(await findByText('Open Fullscreen Map'));
 
       fireEvent.press(await findByTestId('hole-map-picker-ch1-map'), {
         nativeEvent: { coordinate: { latitude: 54.35, longitude: 18.65 } },
       });
-      await findByText('Tee 54.3500, 18.6500');
+      fireEvent.press(await findByTestId('hole-map-picker-ch1-map'), {
+        nativeEvent: { coordinate: { latitude: 54.35, longitude: 18.65 } },
+      });
 
-      fireEvent.press(await findByText('Basket'));
+      fireEvent.press((await findAllByText('Basket'))[0]);
       fireEvent.press(await findByTestId('hole-map-picker-ch1-map'), {
         nativeEvent: { coordinate: { latitude: 54.351, longitude: 18.651 } },
       });
-      await findByText('Basket 54.3510, 18.6510');
 
       fireEvent.press(await findByText('Save Course Hole Coordinates'));
 
@@ -401,6 +407,88 @@ describe('ModeratorLayoutManagementFlow', () => {
         });
         expect(mockCourseHolesUpdateEq).toHaveBeenCalledWith('id', 'ch1');
         expect(mockHolesUpdateEq).toHaveBeenCalledWith('id', 'h1');
+      });
+    });
+
+    it('bootstraps canonical course holes from legacy layout holes when a course still uses the old model', async () => {
+      mockCourseHolesSelect
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'ch1', course_id: 'c1', hole_number: 1, name: 'Hole 1', par: 3, distance_m: null, tee_latitude: null, tee_longitude: null, basket_latitude: null, basket_longitude: null },
+          ],
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'ch1', course_id: 'c1', hole_number: 1, name: 'Hole 1', par: 3, distance_m: null, tee_latitude: null, tee_longitude: null, basket_latitude: null, basket_longitude: null },
+            { id: 'ch2', course_id: 'c1', hole_number: 2, name: 'Hole 2', par: 4, distance_m: 120, tee_latitude: 5, tee_longitude: 6, basket_latitude: 7, basket_longitude: 8 },
+          ],
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'ch1', course_id: 'c1', hole_number: 1, name: 'Hole 1', par: 3, distance_m: 90, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 },
+            { id: 'ch2', course_id: 'c1', hole_number: 2, name: 'Hole 2', par: 4, distance_m: 120, tee_latitude: 5, tee_longitude: 6, basket_latitude: 7, basket_longitude: 8 },
+          ],
+          error: null,
+        });
+      mockHolesSelect.mockResolvedValueOnce({
+        data: [
+          { id: 'h1', hole_number: 1, par: 3, distance_m: 90, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 },
+          { id: 'h2', hole_number: 2, par: 4, distance_m: 120, tee_latitude: 5, tee_longitude: 6, basket_latitude: 7, basket_longitude: 8 },
+        ],
+        error: null,
+      });
+      mockLayoutHolesSelect
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'lh1', layout_id: 'l1', course_hole_id: 'ch1', position: 1 },
+            { id: 'lh2', layout_id: 'l1', course_hole_id: 'ch2', position: 2 },
+          ],
+          error: null,
+        });
+
+      const { findByText } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
+
+      await findByText('Included #1');
+
+      await waitFor(() => {
+        expect(mockCourseHolesInsert).toHaveBeenCalledWith([
+          {
+            course_id: 'c1',
+            hole_number: 2,
+            name: 'Hole 2',
+            par: 4,
+            distance_m: 120,
+            tee_latitude: 5,
+            tee_longitude: 6,
+            basket_latitude: 7,
+            basket_longitude: 8,
+          },
+        ]);
+        expect(mockCourseHolesUpdate).toHaveBeenCalledWith({
+          name: 'Hole 1',
+          par: 3,
+          distance_m: 90,
+          tee_latitude: 1,
+          tee_longitude: 2,
+          basket_latitude: 3,
+          basket_longitude: 4,
+        });
+        expect(mockCourseHolesUpdateEq).toHaveBeenCalledWith('id', 'ch1');
+        expect(mockLayoutHolesInsert).toHaveBeenCalledWith([
+          {
+            layout_id: 'l1',
+            course_hole_id: 'ch1',
+            position: 1,
+          },
+          {
+            layout_id: 'l1',
+            course_hole_id: 'ch2',
+            position: 2,
+          },
+        ]);
       });
     });
   });

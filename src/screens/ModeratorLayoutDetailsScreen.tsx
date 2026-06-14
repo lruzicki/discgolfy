@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { COLORS } from '../theme';
 import { HoleMapEditor } from '../components/HoleMapEditor';
+import { ensureCanonicalCourseData } from '../services/courseCanonicalData';
 
 interface PlayableHole {
   id: string;
@@ -105,6 +106,10 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
   const fetchLayoutEditor = async () => {
     try {
       setIsLoading(true);
+      if (courseId) {
+        await ensureCanonicalCourseData(courseId, layoutId);
+      }
+
       const { data: holeData, error: holeError } = await supabase
         .from('holes')
         .select('*')

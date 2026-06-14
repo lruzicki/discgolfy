@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { COLORS } from '../theme';
 import { HoleMapEditor } from '../components/HoleMapEditor';
+import { ensureCanonicalCourseData } from '../services/courseCanonicalData';
 
 interface CourseHole {
   id: string;
@@ -99,6 +100,7 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
   const fetchCourseManagement = async () => {
     try {
       setIsLoading(true);
+      await ensureCanonicalCourseData(courseId);
 
       const { data: layoutData, error: layoutError } = await supabase
         .from('layouts')

@@ -1,5 +1,14 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
@@ -49,6 +58,8 @@ function buildMapHtml({
   teeLongitude,
   basketLatitude,
   basketLongitude,
+  userLatitude,
+  userLongitude,
   pickMode,
 }: {
   center: { latitude: number; longitude: number };
@@ -56,6 +67,8 @@ function buildMapHtml({
   teeLongitude: number | null;
   basketLatitude: number | null;
   basketLongitude: number | null;
+  userLatitude: number | null;
+  userLongitude: number | null;
   pickMode: PickMode;
 }) {
   const payload = JSON.stringify({
@@ -63,6 +76,7 @@ function buildMapHtml({
     tee: teeLatitude !== null && teeLongitude !== null ? { lat: teeLatitude, lng: teeLongitude } : null,
     basket:
       basketLatitude !== null && basketLongitude !== null ? { lat: basketLatitude, lng: basketLongitude } : null,
+    user: userLatitude !== null && userLongitude !== null ? { lat: userLatitude, lng: userLongitude } : null,
     pickMode,
   });
 
@@ -99,10 +113,9 @@ function buildMapHtml({
         <script>
           const state = ${payload};
           const map = L.map('map', { zoomControl: true, attributionControl: false });
-          const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 20,
-          });
-          tiles.addTo(map);
+          }).addTo(map);
 
           const teeIcon = L.divIcon({
             className: 'tee-marker',
@@ -118,19 +131,27 @@ function buildMapHtml({
             iconAnchor: [11, 11],
           });
 
+          const userIcon = L.divIcon({
+            className: 'user-marker',
+            html: "<div style='background:#3B82F6;color:white;width:18px;height:18px;border-radius:9px;border:2px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.18);'></div>",
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          });
+
           document.getElementById('pick-badge').textContent =
             state.pickMode === 'tee' ? 'Picking tee' : 'Picking basket';
 
           const points = [];
           if (state.tee) points.push([state.tee.lat, state.tee.lng]);
           if (state.basket) points.push([state.basket.lat, state.basket.lng]);
+          if (state.user) points.push([state.user.lat, state.user.lng]);
 
           if (points.length === 0) {
             map.setView([state.center.latitude, state.center.longitude], 16);
           } else if (points.length === 1) {
             map.setView(points[0], 17);
           } else {
-            map.fitBounds(points, { padding: [28, 28] });
+            map.fitBounds(points, { padding: [36, 36] });
           }
 
           if (state.tee) {
@@ -139,6 +160,10 @@ function buildMapHtml({
 
           if (state.basket) {
             L.marker([state.basket.lat, state.basket.lng], { icon: basketIcon }).addTo(map);
+          }
+
+          if (state.user) {
+            L.marker([state.user.lat, state.user.lng], { icon: userIcon }).addTo(map);
           }
 
           if (state.tee && state.basket) {
@@ -192,11 +217,65 @@ export function HoleMapEditor({
   onToggleManual,
   testIDPrefix,
 }: HoleMapEditorProps) {
+  const [isFullscreenVisible, setIsFullscreenVisible] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
   const teeLatitude = toNumber(draft.tee_latitude);
   const teeLongitude = toNumber(draft.tee_longitude);
   const basketLatitude = toNumber(draft.basket_latitude);
   const basketLongitude = toNumber(draft.basket_longitude);
   const center = useMemo(() => getMapCenter(draft), [draft]);
+
+  useEffect(() => {
+    let isActive = true;
+    let subscription: Location.LocationSubscription | null = null;
+
+    async function watchUserLocation() {
+      if (!isFullscreenVisible) {
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (isActive) {
+        setUserLocation({
+          latitude: current.coords.latitude,
+          longitude: current.coords.longitude,
+        });
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 5,
+          timeInterval: 3000,
+        },
+        (location) => {
+          if (!isActive) {
+            return;
+          }
+
+          setUserLocation({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+        }
+      );
+    }
+
+    watchUserLocation();
+
+    return () => {
+      isActive = false;
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, [isFullscreenVisible]);
 
   const mapHtml = useMemo(
     () =>
@@ -206,12 +285,23 @@ export function HoleMapEditor({
         teeLongitude,
         basketLatitude,
         basketLongitude,
+        userLatitude: userLocation?.latitude ?? null,
+        userLongitude: userLocation?.longitude ?? null,
         pickMode,
       }),
-    [center, teeLatitude, teeLongitude, basketLatitude, basketLongitude, pickMode]
+    [
+      basketLatitude,
+      basketLongitude,
+      center,
+      pickMode,
+      teeLatitude,
+      teeLongitude,
+      userLocation?.latitude,
+      userLocation?.longitude,
+    ]
   );
 
-  const mapKey = `${pickMode}:${teeLatitude ?? 'x'}:${teeLongitude ?? 'x'}:${basketLatitude ?? 'x'}:${basketLongitude ?? 'x'}`;
+  const mapKey = `${pickMode}:${teeLatitude ?? 'x'}:${teeLongitude ?? 'x'}:${basketLatitude ?? 'x'}:${basketLongitude ?? 'x'}:${userLocation?.latitude ?? 'u'}:${userLocation?.longitude ?? 'u'}`;
 
   return (
     <View style={styles.card}>
@@ -235,13 +325,13 @@ export function HoleMapEditor({
       </View>
 
       <Text style={styles.helpText}>
-        Tap the map to place the {pickMode === 'tee' ? 'tee' : 'basket'} marker.
+        Podglad pokazuje tee i basket. Otworz pelny ekran, zeby przesuwac mape, zoomowac i stawiac marker bez walki ze scrollowaniem ekranu.
       </Text>
 
-      <View style={styles.mapFrame}>
+      <Pressable style={styles.mapFrame} onPress={() => setIsFullscreenVisible(true)}>
         <WebView
-          key={mapKey}
-          testID={`${testIDPrefix}-map`}
+          key={`${mapKey}:preview`}
+          testID={`${testIDPrefix}-preview-map`}
           source={{ html: mapHtml }}
           originWhitelist={['*']}
           javaScriptEnabled
@@ -249,18 +339,20 @@ export function HoleMapEditor({
           scrollEnabled={false}
           setSupportMultipleWindows={false}
           style={styles.map}
-          onMessage={(event) => {
-            try {
-              const payload = JSON.parse(event.nativeEvent.data);
-              if (payload?.type !== 'pick') return;
-              if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude)) return;
-              onMapPick(pickMode, payload.latitude, payload.longitude);
-            } catch {
-              // Ignore malformed map events.
-            }
-          }}
+          pointerEvents="none"
         />
-      </View>
+        <View style={styles.previewOverlay}>
+          <Ionicons name="expand-outline" size={18} color={COLORS.text} />
+          <Text style={styles.previewOverlayText}>Open fullscreen map</Text>
+        </View>
+      </Pressable>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={() => setIsFullscreenVisible(true)}
+      >
+        <Text style={styles.primaryButtonText}>Open Fullscreen Map</Text>
+      </TouchableOpacity>
 
       <View style={styles.summaryRow}>
         <View style={styles.summaryPill}>
@@ -271,6 +363,12 @@ export function HoleMapEditor({
           <Ionicons name="golf-outline" size={14} color={COLORS.primary} />
           <Text style={styles.summaryText}>
             Basket {formatCoordinate(basketLatitude)}, {formatCoordinate(basketLongitude)}
+          </Text>
+        </View>
+        <View style={styles.summaryPill}>
+          <Ionicons name="locate-outline" size={14} color="#3B82F6" />
+          <Text style={styles.summaryText}>
+            You {userLocation ? `${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}` : 'Location hidden until fullscreen opens'}
           </Text>
         </View>
       </View>
@@ -337,6 +435,72 @@ export function HoleMapEditor({
           </View>
         </View>
       ) : null}
+
+      <Modal visible={isFullscreenVisible} animationType="slide" onRequestClose={() => setIsFullscreenVisible(false)}>
+        <View style={styles.modalRoot}>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderText}>
+              <Text style={styles.modalTitle}>Fullscreen Hole Map</Text>
+              <Text style={styles.modalSubtitle}>
+                Tap map to place the {pickMode === 'tee' ? 'tee' : 'basket'} marker. Blue dot is your current location.
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setIsFullscreenVisible(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalModeRow}>
+            <TouchableOpacity
+              onPress={() => onPickModeChange('tee')}
+              style={[styles.modeButton, pickMode === 'tee' && styles.modeButtonActive]}
+            >
+              <Text style={[styles.modeButtonText, pickMode === 'tee' && styles.modeButtonTextActive]}>
+                Tee
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => onPickModeChange('basket')}
+              style={[styles.modeButton, pickMode === 'basket' && styles.modeButtonActive]}
+            >
+              <Text style={[styles.modeButtonText, pickMode === 'basket' && styles.modeButtonTextActive]}>
+                Basket
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalMapFrame}>
+            <WebView
+              key={`${mapKey}:fullscreen`}
+              testID={`${testIDPrefix}-map`}
+              source={{ html: mapHtml }}
+              originWhitelist={['*']}
+              javaScriptEnabled
+              domStorageEnabled
+              scrollEnabled={false}
+              setSupportMultipleWindows={false}
+              style={styles.modalMap}
+              onMessage={(event) => {
+                try {
+                  const payload = JSON.parse(event.nativeEvent.data);
+                  if (payload?.type !== 'pick') return;
+                  if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude)) return;
+                  onMapPick(pickMode, payload.latitude, payload.longitude);
+                } catch {
+                  // Ignore malformed map events.
+                }
+              }}
+            />
+          </View>
+
+          <View style={styles.modalFooter}>
+            <Text style={styles.modalFooterText}>Pinch to zoom. Drag to pan. Tap to place marker.</Text>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => setIsFullscreenVisible(false)}>
+              <Text style={styles.primaryButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -353,6 +517,12 @@ const styles = StyleSheet.create({
   modeRow: {
     flexDirection: 'row',
     gap: 8,
+  },
+  modalModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
   },
   modeButton: {
     flex: 1,
@@ -383,10 +553,39 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.borderDark,
+    position: 'relative',
   },
   map: {
-    height: 260,
+    height: 220,
     backgroundColor: '#10161D',
+  },
+  previewOverlay: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(10, 15, 20, 0.92)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  previewOverlayText: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#081018',
+    fontWeight: '700',
   },
   summaryRow: {
     gap: 8,
@@ -433,5 +632,59 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  modalRoot: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    paddingTop: 18,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+  },
+  modalHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  closeButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+    padding: 10,
+  },
+  modalMapFrame: {
+    flex: 1,
+    marginHorizontal: 18,
+    marginBottom: 18,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
+  },
+  modalMap: {
+    flex: 1,
+    backgroundColor: '#10161D',
+  },
+  modalFooter: {
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    gap: 12,
+  },
+  modalFooterText: {
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
 });
