@@ -18,6 +18,7 @@ import { HoleMapEditor } from '../components/HoleMapEditor';
 interface CourseHole {
   id: string;
   course_id: string;
+  hole_number: number;
   name: string;
   par: number;
   distance_m?: number | null;
@@ -72,8 +73,9 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
   const [newLayoutName, setNewLayoutName] = useState('');
   const [selectedCloneLayoutId, setSelectedCloneLayoutId] = useState<string | null>(null);
 
-  const [newHoleName, setNewHoleName] = useState('');
+  const [newHoleNumber, setNewHoleNumber] = useState('');
   const [newHolePar, setNewHolePar] = useState('3');
+  const [newHoleDistance, setNewHoleDistance] = useState('');
 
   const [newMapName, setNewMapName] = useState('');
   const [newMapStyleKey, setNewMapStyleKey] = useState('park');
@@ -109,7 +111,7 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
         .from('course_holes')
         .select('*')
         .eq('course_id', courseId)
-        .order('name');
+        .order('hole_number');
       if (holeError) throw holeError;
 
       const { data: mapData, error: mapError } = await supabase
@@ -125,10 +127,6 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
       setLayouts(nextLayouts);
       setCourseHoles(nextCourseHoles);
       setCourseMaps(mapData || []);
-
-      if (nextLayouts.length > 0 && !selectedCloneLayoutId) {
-        setSelectedCloneLayoutId(nextLayouts[0].id);
-      }
 
       if (nextCourseHoles.length > 0) {
         setSelectedCourseHoleId((current) =>
@@ -211,14 +209,19 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
   const handleSaveSelectedCourseHole = async () => {
     if (!selectedCourseHole || !selectedCourseHoleDraft) return;
 
-    const name = String(selectedCourseHoleDraft.name || '').trim();
-    if (!name) {
-      Alert.alert('Error', 'Please provide a reusable hole name.');
+    const holeNumber = toNullableNumber(selectedCourseHoleDraft.hole_number as any);
+    if (!holeNumber) {
+      Alert.alert('Error', 'Please provide a hole number.');
+      return;
+    }
+    if (courseHoles.some((hole) => hole.id !== selectedCourseHole.id && hole.hole_number === holeNumber)) {
+      Alert.alert('Error', `Hole ${holeNumber} already exists in this course.`);
       return;
     }
 
     const payload = {
-      name,
+      hole_number: holeNumber,
+      name: `Hole ${holeNumber}`,
       par: toNullableNumber(selectedCourseHoleDraft.par as any) || 3,
       distance_m: toNullableNumber(selectedCourseHoleDraft.distance_m as any),
       tee_latitude: toNullableNumber(selectedCourseHoleDraft.tee_latitude as any),
@@ -239,29 +242,42 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
         return next;
       });
       await fetchCourseManagement();
-      Alert.alert('Saved', `${payload.name} updated.`);
+      Alert.alert('Saved', `Hole ${payload.hole_number} updated.`);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
   };
 
   const handleAddCourseHole = async () => {
-    if (!newHoleName.trim()) {
-      Alert.alert('Error', 'Please provide a reusable hole name.');
+    const holeNumber = toNullableNumber(newHoleNumber);
+    if (!holeNumber) {
+      Alert.alert('Error', 'Please provide a hole number.');
+      return;
+    }
+    if (courseHoles.some((hole) => hole.hole_number === holeNumber)) {
+      Alert.alert('Error', `Hole ${holeNumber} already exists in this course.`);
+      return;
+    }
+    const distance = toNullableNumber(newHoleDistance);
+    if (distance === null) {
+      Alert.alert('Error', 'Please provide a distance in meters.');
       return;
     }
 
     try {
       const insert = supabase.from('course_holes').insert({
         course_id: courseId,
-        name: newHoleName.trim(),
+        hole_number: holeNumber,
+        name: `Hole ${holeNumber}`,
         par: Number(newHolePar) || 3,
+        distance_m: distance,
       });
       const { data, error } = await insert.select();
       if (error) throw error;
 
-      setNewHoleName('');
+      setNewHoleNumber('');
       setNewHolePar('3');
+      setNewHoleDistance('');
 
       const insertedId = data?.[0]?.id;
       await fetchCourseManagement();
@@ -393,21 +409,39 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
 
               <View style={styles.addCard}>
                 <Text style={styles.cardTitle}>Add reusable hole</Text>
+                <Text style={styles.fieldLabel}>Hole number</Text>
                 <TextInput
-                  placeholder="Reusable Hole Name"
+                  placeholder="Hole Number"
                   placeholderTextColor={COLORS.textSecondary}
                   style={styles.input}
-                  value={newHoleName}
-                  onChangeText={setNewHoleName}
-                />
-                <TextInput
-                  placeholder="Par"
-                  placeholderTextColor={COLORS.textSecondary}
-                  style={styles.input}
-                  value={newHolePar}
-                  onChangeText={setNewHolePar}
+                  value={newHoleNumber}
+                  onChangeText={setNewHoleNumber}
                   keyboardType="numeric"
                 />
+                <View style={styles.inlineFields}>
+                  <View style={styles.inlineFieldBlock}>
+                    <Text style={styles.fieldLabel}>Par</Text>
+                  <TextInput
+                    placeholder="Par"
+                    placeholderTextColor={COLORS.textSecondary}
+                    style={[styles.input, styles.inlineInput]}
+                    value={newHolePar}
+                    onChangeText={setNewHolePar}
+                    keyboardType="numeric"
+                  />
+                  </View>
+                  <View style={styles.inlineFieldBlock}>
+                    <Text style={styles.fieldLabel}>Distance in meters</Text>
+                  <TextInput
+                    placeholder="Distance (m)"
+                    placeholderTextColor={COLORS.textSecondary}
+                    style={[styles.input, styles.inlineInput]}
+                    value={newHoleDistance}
+                    onChangeText={setNewHoleDistance}
+                    keyboardType="numeric"
+                  />
+                  </View>
+                </View>
                 <TouchableOpacity style={styles.primaryButton} onPress={handleAddCourseHole}>
                   <Text style={styles.primaryButtonText}>Add Course Hole</Text>
                 </TouchableOpacity>
@@ -427,8 +461,10 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
                           style={[styles.holeChip, selected && styles.holeChipActive]}
                           onPress={() => setSelectedCourseHoleId(hole.id)}
                         >
-                          <Text style={[styles.holeChipTitle, selected && styles.holeChipTitleActive]}>{hole.name}</Text>
-                          <Text style={[styles.holeChipMeta, selected && styles.holeChipMetaActive]}>Par {hole.par}</Text>
+                          <Text style={[styles.holeChipTitle, selected && styles.holeChipTitleActive]}>Hole {hole.hole_number}</Text>
+                          <Text style={[styles.holeChipMeta, selected && styles.holeChipMetaActive]}>
+                            Par {hole.par} • {hole.distance_m ?? '-'}m
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -442,18 +478,24 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
                           <Text style={styles.cardMeta}>Changes here are the canonical values for this Course Hole.</Text>
                         </View>
                         <View style={styles.badge}>
-                          <Text style={styles.badgeText}>{selectedCourseHoleDraft.name || 'Hole'}</Text>
+                          <Text style={styles.badgeText}>Hole {selectedCourseHoleDraft.hole_number}</Text>
                         </View>
                       </View>
 
-                      <TextInput
-                        placeholder="Hole Name"
-                        placeholderTextColor={COLORS.textSecondary}
-                        style={styles.input}
-                        value={String(selectedCourseHoleDraft.name || '')}
-                        onChangeText={(value) => updateCourseHoleDraft(selectedCourseHoleDraft.id!, 'name', value)}
-                      />
                       <View style={styles.inlineFields}>
+                        <View style={styles.inlineFieldBlock}>
+                          <Text style={styles.fieldLabel}>Hole number</Text>
+                        <TextInput
+                          placeholder="Hole Number"
+                          placeholderTextColor={COLORS.textSecondary}
+                          style={[styles.input, styles.inlineInput]}
+                          value={String(selectedCourseHoleDraft.hole_number ?? '')}
+                          onChangeText={(value) => updateCourseHoleDraft(selectedCourseHoleDraft.id!, 'hole_number', value)}
+                          keyboardType="numeric"
+                        />
+                        </View>
+                        <View style={styles.inlineFieldBlock}>
+                          <Text style={styles.fieldLabel}>Par</Text>
                         <TextInput
                           placeholder="Par"
                           placeholderTextColor={COLORS.textSecondary}
@@ -462,6 +504,9 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
                           onChangeText={(value) => updateCourseHoleDraft(selectedCourseHoleDraft.id!, 'par', value)}
                           keyboardType="numeric"
                         />
+                        </View>
+                        <View style={styles.inlineFieldBlock}>
+                          <Text style={styles.fieldLabel}>Distance in meters</Text>
                         <TextInput
                           placeholder="Distance (m)"
                           placeholderTextColor={COLORS.textSecondary}
@@ -475,6 +520,7 @@ export function ModeratorCourseDetailsScreen({ route, navigation }: any) {
                           onChangeText={(value) => updateCourseHoleDraft(selectedCourseHoleDraft.id!, 'distance_m', value)}
                           keyboardType="numeric"
                         />
+                        </View>
                       </View>
 
                       <HoleMapEditor
@@ -742,8 +788,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  inlineFieldBlock: {
+    flex: 1,
+    gap: 6,
+  },
   inlineInput: {
     flex: 1,
+  },
+  fieldLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
   },
   primaryButton: {
     backgroundColor: COLORS.primary,
@@ -789,10 +844,6 @@ const styles = StyleSheet.create({
   },
   holeChipMetaActive: {
     color: COLORS.primary,
-  },
-  fieldLabel: {
-    color: COLORS.textSecondary,
-    fontWeight: '600',
   },
   optionRow: {
     flexDirection: 'row',

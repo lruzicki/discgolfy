@@ -52,6 +52,21 @@ describe('useMatchStore', () => {
     });
   });
 
+  it('decrements score from one stroke back to unplayed instead of zero', () => {
+    const { setScore, decrementScore } = useMatchStore.getState();
+
+    setScore('h1', 'p1', 1);
+    decrementScore('h1', 'p1', 3);
+
+    const state = useMatchStore.getState();
+    expect(state.scores['h1']['p1']).toBeNull();
+    expect(state.syncQueue['h1_p1']).toEqual({
+      holeId: 'h1',
+      playerId: 'p1',
+      strokes: null,
+    });
+  });
+
   it('sets course and layout', () => {
     const { setCourse, setLayout } = useMatchStore.getState();
     

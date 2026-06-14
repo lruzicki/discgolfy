@@ -331,7 +331,6 @@ export function ActiveMatchScreen() {
     incrementScore,
     decrementScore,
     setScore,
-    clearScore,
     hydrateScores,
     applyRemoteScore,
     triggerSync,
@@ -356,6 +355,7 @@ export function ActiveMatchScreen() {
   const [isEventActionsVisible, setIsEventActionsVisible] = useState(false);
   const [holeEvents, setHoleEvents] = useState<Record<string, number>>({});
   const [unplayableScoreSnapshots, setUnplayableScoreSnapshots] = useState<Record<string, Record<string, number | null | undefined>>>({});
+  const [unplayableHoleIds, setUnplayableHoleIds] = useState<string[]>([]);
   const isSchemaCacheMissing = (error: any, key: string) =>
     Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
 
@@ -886,7 +886,7 @@ const fetchEventsForHole = async () => {
 
     return holes.some((hole) => {
       const holeScores = scores[hole.id] || {};
-      const isUnplayableToday = players.every((player) => holeScores[player.id] === null);
+      const isUnplayableToday = unplayableHoleIds.includes(hole.id);
 
       if (isUnplayableToday) return false;
 
@@ -952,13 +952,14 @@ const fetchEventsForHole = async () => {
     if (!isCreator) return;
     if (!currentHole || players.length === 0) return;
     const holeScores = scores[currentHole.id] || {};
-    const isCurrentlyUnplayable = players.every((player) => holeScores[player.id] === null);
+    const isCurrentlyUnplayable = unplayableHoleIds.includes(currentHole.id);
     if (isCurrentlyUnplayable) {
       const snapshot = unplayableScoreSnapshots[currentHole.id] || {};
       players.forEach((player) => {
         const previousValue = snapshot[player.id];
         setScore(currentHole.id, player.id, previousValue === undefined ? null : previousValue);
       });
+      setUnplayableHoleIds((prev) => prev.filter((holeId) => holeId !== currentHole.id));
       setUnplayableScoreSnapshots((prev) => {
         const next = { ...prev };
         delete next[currentHole.id];
@@ -970,6 +971,7 @@ const fetchEventsForHole = async () => {
         snapshot[player.id] = holeScores[player.id];
         setScore(currentHole.id, player.id, null);
       });
+      setUnplayableHoleIds((prev) => (prev.includes(currentHole.id) ? prev : [...prev, currentHole.id]));
       setUnplayableScoreSnapshots((prev) => ({ ...prev, [currentHole.id]: snapshot }));
     }
     await triggerSync();
@@ -1119,9 +1121,9 @@ const fetchEventsForHole = async () => {
             <ScrollView contentContainerStyle={styles.scrollContent}>
               {players.map(player => {
                 const strokes = scores[currentHole.id]?.[player.id];
-                const isHoleUnplayable = players.length > 0 && players.every((p) => scores[currentHole.id]?.[p.id] === null);
-                const scoreDiff = strokes ? strokes - currentHole.par : 0;
-                const scoreDiffText = scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
+                const isHoleUnplayable = unplayableHoleIds.includes(currentHole.id);
+                const scoreDiff = strokes !== null && strokes !== undefined ? strokes - currentHole.par : null;
+                const scoreDiffText = scoreDiff === null ? '-' : scoreDiff === 0 ? 'E' : (scoreDiff > 0 ? `+${scoreDiff}` : scoreDiff);
 
                 return (
                   <View key={player.id} style={[styles.playerRow, isHoleUnplayable && styles.unplayableRow]}>
@@ -1134,10 +1136,10 @@ const fetchEventsForHole = async () => {
                         ) : (
                           <Text style={[
                             styles.playerScoreStatus,
-                            scoreDiff < 0 && styles.scoreUnder,
-                            scoreDiff > 0 && styles.scoreOver
+                            scoreDiff !== null && scoreDiff < 0 && styles.scoreUnder,
+                            scoreDiff !== null && scoreDiff > 0 && styles.scoreOver
                           ]}>
-                            {scoreDiffText} ({strokes || 0})
+                            {scoreDiff === null ? 'Not played' : `${scoreDiffText} (${strokes})`}
                           </Text>
                         )}
                       </View>
@@ -1147,6 +1149,7 @@ const fetchEventsForHole = async () => {
                       <View style={styles.scoreControls}>
                       <TouchableOpacity 
                         style={styles.controlBtn}
+                        accessibilityLabel={`Decrease ${player.display_name} score for hole ${currentHole.hole_number}`}
                         disabled={isHoleUnplayable}
                         onPress={() => decrementScore(currentHole.id, player.id, currentHole.par)}
                       >
@@ -1159,22 +1162,11 @@ const fetchEventsForHole = async () => {
 
                       <TouchableOpacity 
                         style={[styles.controlBtn, styles.controlBtnAdd]}
+                        accessibilityLabel={`Increase ${player.display_name} score for hole ${currentHole.hole_number}`}
                         disabled={isHoleUnplayable}
                         onPress={() => incrementScore(currentHole.id, player.id, currentHole.par)}
                       >
                         <Ionicons name="add" size={24} color={COLORS.onPrimary} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.clearScoreBtn}
-                        accessibilityLabel={`Clear ${player.display_name} score for hole ${currentHole.hole_number}`}
-                        disabled={isHoleUnplayable || strokes === null || strokes === undefined}
-                        onPress={async () => {
-                          clearScore(currentHole.id, player.id);
-                          await triggerSync();
-                        }}
-                      >
-                        <MaterialCommunityIcons name="restore" size={18} color={COLORS.textSecondary} />
                       </TouchableOpacity>
                     </View>
                     ) : (
@@ -1194,6 +1186,7 @@ const fetchEventsForHole = async () => {
             holes={holes.slice(activeItem.start, activeItem.end + 1)} 
             players={players} 
             scores={scores} 
+            unplayableHoleIds={unplayableHoleIds}
           />
         </ScrollView>
       ) : null}
@@ -1408,7 +1401,6 @@ const styles = StyleSheet.create({
   scoreControls: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   controlBtn: { width: 34, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center' },
   controlBtnAdd: { backgroundColor: COLORS.primary },
-  clearScoreBtn: { width: 34, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.04)', justifyContent: 'center', alignItems: 'center' },
   currentScoreContainer: { width: 18, alignItems: 'center' },
   readOnlyScoreContainer: { minWidth: 34, height: 36, justifyContent: 'center', alignItems: 'center' },
   currentScoreText: { color: '#FFF', fontSize: 17, fontWeight: '600' },

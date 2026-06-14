@@ -29,6 +29,7 @@ interface PlayableHole {
 interface CourseHole {
   id: string;
   course_id: string;
+  hole_number: number;
   name: string;
   par: number;
   distance_m?: number | null;
@@ -114,10 +115,10 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
 
       if (courseId) {
         const { data: courseHoleData, error: courseHoleError } = await supabase
-          .from('course_holes')
-          .select('*')
-          .eq('course_id', courseId)
-          .order('name');
+        .from('course_holes')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('hole_number');
         if (courseHoleError) throw courseHoleError;
 
         const layoutHoleQuery: any = supabase.from('layout_holes');
@@ -195,59 +196,6 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
       if (error) throw error;
       setLayoutTitle(nextName);
       Alert.alert('Saved', 'Layout name updated.');
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  const handleAddHole = async () => {
-    try {
-      const nextHoleNumber = holes.length > 0 ? Math.max(...holes.map((hole) => hole.hole_number)) + 1 : 1;
-      const { error } = await supabase.from('holes').insert({
-        layout_id: layoutId,
-        hole_number: nextHoleNumber,
-        par: 3,
-      });
-      if (error) throw error;
-
-      await supabase.from('layouts').update({ hole_count: holes.length + 1 }).eq('id', layoutId);
-      await fetchLayoutEditor();
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  const handleDeleteHole = async (holeId: string) => {
-    try {
-      const { error } = await supabase.from('holes').delete().eq('id', holeId);
-      if (error) throw error;
-
-      await supabase
-        .from('layouts')
-        .update({ hole_count: Math.max(0, holes.length - 1) })
-        .eq('id', layoutId);
-      await fetchLayoutEditor();
-    } catch (err: any) {
-      Alert.alert('Error', err.message);
-    }
-  };
-
-  const handleSavePlayableHole = async (hole: PlayableHole) => {
-    try {
-      const payload = {
-        par: toNullableNumber(hole.par) || 3,
-        distance_m: toNullableNumber(hole.distance_m),
-        tee_latitude: toNullableNumber(hole.tee_latitude),
-        tee_longitude: toNullableNumber(hole.tee_longitude),
-        basket_latitude: toNullableNumber(hole.basket_latitude),
-        basket_longitude: toNullableNumber(hole.basket_longitude),
-      };
-
-      const { error } = await supabase.from('holes').update(payload).eq('id', hole.id);
-      if (error) throw error;
-
-      Alert.alert('Saved', `Layout hole ${hole.hole_number} updated.`);
-      await fetchLayoutEditor();
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
@@ -342,7 +290,8 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
     const layoutHole = layoutHoleByCourseHoleId.get(selectedCourseHole.id);
 
     const payload = {
-      name: String(selectedDraft.name || '').trim() || selectedCourseHole.name,
+      hole_number: toNullableNumber(selectedDraft.hole_number) || selectedCourseHole.hole_number,
+      name: `Hole ${toNullableNumber(selectedDraft.hole_number) || selectedCourseHole.hole_number}`,
       par: toNullableNumber(selectedDraft.par) || 3,
       distance_m: toNullableNumber(selectedDraft.distance_m),
       tee_latitude: toNullableNumber(selectedDraft.tee_latitude),
@@ -378,14 +327,10 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
         return next;
       });
       await fetchLayoutEditor();
-      Alert.alert('Saved', `${payload.name} updated.`);
+      Alert.alert('Saved', `Hole ${payload.hole_number} updated.`);
     } catch (err: any) {
       Alert.alert('Error', err.message);
     }
-  };
-
-  const updatePlayableHole = (holeId: string, field: keyof PlayableHole, value: string) => {
-    setHoles((prev) => prev.map((hole) => (hole.id === holeId ? { ...hole, [field]: value } : hole)));
   };
 
   return (
@@ -443,9 +388,9 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
                         style={[styles.holeChip, selected && styles.holeChipActive]}
                         onPress={() => setSelectedCourseHoleId(hole.id)}
                       >
-                        <Text style={[styles.holeChipTitle, selected && styles.holeChipTitleActive]}>{hole.name}</Text>
+                        <Text style={[styles.holeChipTitle, selected && styles.holeChipTitleActive]}>Hole {hole.hole_number}</Text>
                         <Text style={[styles.holeChipMeta, selected && styles.holeChipMetaActive]}>
-                          #{layoutHole?.position ?? '-'} • Par {hole.par}
+                          #{layoutHole?.position ?? '-'} • {hole.distance_m ?? '-'}m • Par {hole.par}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -454,11 +399,12 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
 
                 <View style={styles.inlineFields}>
                   <TextInput
-                    placeholder="Hole Name"
+                    placeholder="Hole Number"
                     placeholderTextColor={COLORS.textSecondary}
-                    style={[styles.input, styles.inlineInput]}
-                    value={String(selectedDraft.name || '')}
-                    onChangeText={(value) => updateDraft(selectedDraft.id!, 'name', value)}
+                    style={[styles.input, styles.inlineInputSmall]}
+                    value={String(selectedDraft.hole_number ?? '')}
+                    onChangeText={(value) => updateDraft(selectedDraft.id!, 'hole_number', value)}
+                    keyboardType="numeric"
                   />
                   <TextInput
                     placeholder="Par"
@@ -513,7 +459,7 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
                         style={styles.listCardTextWrap}
                         onPress={() => setSelectedCourseHoleId(courseHole.id)}
                       >
-                        <Text style={styles.listCardTitle}>{courseHole.name}</Text>
+                        <Text style={styles.listCardTitle}>Hole {courseHole.hole_number}</Text>
                         <Text style={styles.listCardMeta}>Included #{layoutHole.position}</Text>
                       </TouchableOpacity>
                       <View style={styles.actionPillRow}>
@@ -550,67 +496,14 @@ export function ModeratorLayoutDetailsScreen({ route, navigation }: any) {
                 availableCourseHoles.map((courseHole) => (
                   <View key={courseHole.id} style={styles.listCard}>
                     <View style={styles.listCardTextWrap}>
-                      <Text style={styles.listCardTitle}>{courseHole.name}</Text>
-                      <Text style={styles.listCardMeta}>Excluded • Par {courseHole.par}</Text>
+                      <Text style={styles.listCardTitle}>Hole {courseHole.hole_number}</Text>
+                      <Text style={styles.listCardMeta}>Excluded • {courseHole.distance_m ?? '-'}m • Par {courseHole.par}</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleAddCourseHoleToLayout(courseHole)}
                       style={styles.primaryButtonCompact}
                     >
                       <Text style={styles.primaryButtonText}>Add to Layout</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              )}
-            </View>
-
-            <View style={styles.sectionBlock}>
-              <View style={styles.blockHeader}>
-                <Text style={styles.sectionTitle}>PLAYABLE HOLES</Text>
-                <TouchableOpacity style={styles.primaryButtonCompact} onPress={handleAddHole}>
-                  <Text style={styles.primaryButtonText}>Add Hole</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.sectionBody}>
-                These are the actual playable `holes` rows used by Matches today. Keep them aligned with the selected Course Holes.
-              </Text>
-
-              {holes.length === 0 ? (
-                <Text style={styles.emptyText}>No playable holes in this layout.</Text>
-              ) : (
-                holes.map((hole) => (
-                  <View key={hole.id} style={styles.editorCard}>
-                    <View style={styles.blockHeader}>
-                      <View>
-                        <Text style={styles.listCardTitle}>Layout Hole {hole.hole_number}</Text>
-                        <Text style={styles.listCardMeta}>Direct playable fallback editor</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => handleDeleteHole(hole.id)} style={[styles.actionPill, styles.dangerPill]}>
-                        <Text style={styles.actionPillText}>Delete</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.inlineFields}>
-                      <TextInput
-                        placeholder="Par"
-                        placeholderTextColor={COLORS.textSecondary}
-                        style={[styles.input, styles.inlineInputSmall]}
-                        value={String(hole.par || '')}
-                        onChangeText={(value) => updatePlayableHole(hole.id, 'par', value)}
-                        keyboardType="numeric"
-                      />
-                      <TextInput
-                        placeholder="Distance (m)"
-                        placeholderTextColor={COLORS.textSecondary}
-                        style={[styles.input, styles.inlineInput]}
-                        value={hole.distance_m !== null && hole.distance_m !== undefined ? String(hole.distance_m) : ''}
-                        onChangeText={(value) => updatePlayableHole(hole.id, 'distance_m', value)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-
-                    <TouchableOpacity style={styles.primaryButton} onPress={() => handleSavePlayableHole(hole)}>
-                      <Text style={styles.primaryButtonText}>Save</Text>
                     </TouchableOpacity>
                   </View>
                 ))

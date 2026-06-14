@@ -682,6 +682,7 @@ describe('Active Match resume guard', () => {
   });
 
   it('finishes without confirmation when missing scores belong to an unplayable-today hole', async () => {
+    const upsertScores = jest.fn(() => Promise.resolve({ error: null }));
     const updateMatchPlayer = jest.fn(() => ({
       eq: jest.fn(() => ({
         eq: jest.fn(() => Promise.resolve({ error: null })),
@@ -736,15 +737,20 @@ describe('Active Match resume guard', () => {
       }
 
       if (table === 'scores') {
-        return mockEqQuery({
-          data: [
-            { hole_id: 'hole-1', player_id: 'player-1', strokes: 3 },
-            { hole_id: 'hole-1', player_id: 'player-2', strokes: 4 },
-            { hole_id: 'hole-2', player_id: 'player-1', strokes: null },
-            { hole_id: 'hole-2', player_id: 'player-2', strokes: null },
-          ],
-          error: null,
-        });
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => Promise.resolve({
+              data: [
+                { hole_id: 'hole-1', player_id: 'player-1', strokes: 3 },
+                { hole_id: 'hole-1', player_id: 'player-2', strokes: 4 },
+                { hole_id: 'hole-2', player_id: 'player-1', strokes: null },
+                { hole_id: 'hole-2', player_id: 'player-2', strokes: null },
+              ],
+              error: null,
+            })),
+          })),
+          upsert: upsertScores,
+        };
       }
 
       if (table === 'discs' || table === 'throws') {
@@ -777,6 +783,16 @@ describe('Active Match resume guard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('FINISH ROUND')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('2'));
+    fireEvent.press(screen.getByLabelText('Mark hole unplayable today'));
+
+    await waitFor(() => {
+      expect(useMatchStore.getState().scores['hole-2']).toEqual({
+        'player-1': null,
+        'player-2': null,
+      });
     });
 
     fireEvent.press(screen.getByText('FINISH ROUND'));
@@ -1766,7 +1782,7 @@ describe('Active Match resume guard', () => {
     });
   });
 
-  it('clears one player score back to blank without clearing other players on the hole', async () => {
+  it('decrements one player score down to blank without clearing other players on the hole', async () => {
     const upsertScores = jest.fn(() => Promise.resolve({ error: null }));
 
     mockSupabaseFrom.mockImplementation((table: string) => {
@@ -1801,7 +1817,7 @@ describe('Active Match resume guard', () => {
           select: jest.fn(() => ({
             eq: jest.fn(() => Promise.resolve({
               data: [
-                { hole_id: 'hole-1', player_id: 'player-1', strokes: 3 },
+                { hole_id: 'hole-1', player_id: 'player-1', strokes: 1 },
                 { hole_id: 'hole-1', player_id: 'player-2', strokes: 4 },
               ],
               error: null,
@@ -1826,24 +1842,22 @@ describe('Active Match resume guard', () => {
     const screen = render(<ActiveMatchScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('E (3)')).toBeTruthy();
+      expect(screen.getByText('-2 (1)')).toBeTruthy();
       expect(screen.getByText('+1 (4)')).toBeTruthy();
     });
 
-    fireEvent.press(screen.getByLabelText('Clear Alice score for hole 1'));
+    fireEvent.press(screen.getByLabelText('Decrease Alice score for hole 1'));
 
     await waitFor(() => {
       expect(useMatchStore.getState().scores['hole-1']).toEqual({
         'player-1': null,
         'player-2': 4,
       });
-      expect(screen.getByText('E (0)')).toBeTruthy();
+      expect(screen.getByText('Not played')).toBeTruthy();
       expect(screen.getByText('+1 (4)')).toBeTruthy();
-      expect(upsertScores).toHaveBeenCalledWith(
-        [{ match_id: 'match-1', hole_id: 'hole-1', player_id: 'player-1', strokes: null }],
-        { onConflict: 'match_id,hole_id,player_id' },
-      );
     });
+
+    expect(upsertScores).not.toHaveBeenCalled();
   });
 
   it('renders participating non-creator active Match as read-only watcher mode', async () => {

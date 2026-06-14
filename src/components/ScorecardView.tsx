@@ -20,9 +20,11 @@ interface ScorecardViewProps {
   players: Player[];
   scores: Record<string, Record<string, number | null>>;
   showLeaderboard?: boolean;
+  unplayableHoleIds?: string[];
 }
 
-export const ScorecardView = ({ holes, players, scores, showLeaderboard = true }: ScorecardViewProps) => {
+export const ScorecardView = ({ holes, players, scores, showLeaderboard = true, unplayableHoleIds = [] }: ScorecardViewProps) => {
+  const unplayableHoleIdSet = new Set(unplayableHoleIds);
   const chunks = [];
   for (let i = 0; i < holes.length; i += 9) {
     chunks.push(holes.slice(i, i + 9));
@@ -119,7 +121,7 @@ export const ScorecardView = ({ holes, players, scores, showLeaderboard = true }
                 testID={`summary-cell-hole-${h.id}`}
                 style={[
                   styles.summaryCell,
-                  players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null) && styles.unplayableSummaryCell,
+                  unplayableHoleIdSet.has(h.id) && styles.unplayableSummaryCell,
                 ]}
               >
                 <Text style={styles.summaryHoleNum}>{h.hole_number}</Text>
@@ -147,7 +149,7 @@ export const ScorecardView = ({ holes, players, scores, showLeaderboard = true }
                 const strokes = scores[h.id]?.[player.id];
                 const diff = strokes ? strokes - h.par : null;
                 const scoreStyle = getScoreStyle(diff);
-                const isUnplayable = players.length > 0 && players.every((p) => scores[h.id]?.[p.id] === null);
+                const isUnplayable = unplayableHoleIdSet.has(h.id);
                 return (
                   <View key={h.id} style={[styles.summaryCell, scoreStyle, isUnplayable && styles.unplayableSummaryCell]}>
                     <Text style={[

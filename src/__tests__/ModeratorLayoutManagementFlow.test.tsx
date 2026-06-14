@@ -53,13 +53,13 @@ const mockLayoutHolesDeleteEq = jest.fn(async () => ({ error: null }));
 const mockLayoutHolesDelete = jest.fn(() => ({ eq: mockLayoutHolesDeleteEq }));
 const mockCourseMapsInsert = jest.fn(async (payload: any) => ({ data: [{ id: 'map-new', ...payload }], error: null }));
 const mockHolesSelect = jest.fn(async () => ({ 
-  data: [{ id: 'h1', hole_number: 1, par: 3, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 }], 
+  data: [{ id: 'h1', hole_number: 1, par: 3, distance_m: 90, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 }], 
   error: null 
 }));
 const mockCourseHolesSelect = jest.fn(async () => ({
   data: [
-    { id: 'ch1', course_id: 'c1', name: 'Hole 1', par: 3, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 },
-    { id: 'ch2', course_id: 'c1', name: 'Hole 2', par: 4, tee_latitude: null, tee_longitude: null, basket_latitude: null, basket_longitude: null },
+    { id: 'ch1', course_id: 'c1', hole_number: 1, name: 'Hole 1', par: 3, distance_m: 90, tee_latitude: 1, tee_longitude: 2, basket_latitude: 3, basket_longitude: 4 },
+    { id: 'ch2', course_id: 'c1', hole_number: 2, name: 'Hole 2', par: 4, distance_m: 120, tee_latitude: null, tee_longitude: null, basket_latitude: null, basket_longitude: null },
   ],
   error: null,
 }));
@@ -232,10 +232,11 @@ describe('ModeratorLayoutManagementFlow', () => {
     });
 
     it('allows adding a new layout and clones holes if selected', async () => {
-      const { findByText, findByPlaceholderText, findAllByPlaceholderText } = render(<ModeratorCourseDetailsScreen navigation={mockNavigation} route={route} />);
+      const { findByText, findAllByText, findByPlaceholderText } = render(<ModeratorCourseDetailsScreen navigation={mockNavigation} route={route} />);
       await findByText('LAYOUTS');
 
       fireEvent.changeText(await findByPlaceholderText('New Layout Name'), 'Pro Layout');
+      fireEvent.press((await findAllByText('Base Layout'))[0]);
       fireEvent.press(await findByText('Add Layout'));
 
       await waitFor(() => {
@@ -247,7 +248,7 @@ describe('ModeratorLayoutManagementFlow', () => {
         layout_id: 'layout-new',
         hole_number: 1,
         par: 3,
-        distance_m: undefined,
+        distance_m: 90,
         tee_latitude: 1,
         tee_longitude: 2,
         basket_latitude: 3,
@@ -265,15 +266,18 @@ describe('ModeratorLayoutManagementFlow', () => {
       await findByText('COURSE MAPS');
       await findByText('Main Park Map');
 
-      fireEvent.changeText(await findByPlaceholderText('Reusable Hole Name'), 'Island Hole');
+      fireEvent.changeText((await findAllByPlaceholderText('Hole Number'))[0], '7');
       fireEvent.changeText((await findAllByPlaceholderText('Par'))[0], '4');
+      fireEvent.changeText((await findAllByPlaceholderText('Distance (m)'))[0], '110');
       fireEvent.press(await findByText('Add Course Hole'));
 
       await waitFor(() => {
         expect(mockCourseHolesInsert).toHaveBeenCalledWith({
           course_id: 'c1',
-          name: 'Island Hole',
+          hole_number: 7,
+          name: 'Hole 7',
           par: 4,
+          distance_m: 110,
         });
       });
 
@@ -290,13 +294,13 @@ describe('ModeratorLayoutManagementFlow', () => {
     });
 
     it('lets the moderator edit a reusable course hole on a real map surface', async () => {
-      const { findByText, findByPlaceholderText, findByTestId } = render(
+      const { findByText, findAllByPlaceholderText, findByTestId } = render(
         <ModeratorCourseDetailsScreen navigation={mockNavigation} route={route} />
       );
 
       await findByText('COURSE HOLE POOL');
       fireEvent.press(await findByTestId('course-hole-chip-ch1'));
-      fireEvent.changeText(await findByPlaceholderText('Hole Name'), 'Island Ace');
+      fireEvent.changeText((await findAllByPlaceholderText('Hole Number'))[1], '1');
       fireEvent.press(await findByTestId('course-hole-map-picker-ch1-map'), {
         nativeEvent: { coordinate: { latitude: 54.35, longitude: 18.65 } },
       });
@@ -308,9 +312,10 @@ describe('ModeratorLayoutManagementFlow', () => {
 
       await waitFor(() => {
         expect(mockCourseHolesUpdate).toHaveBeenCalledWith({
-          name: 'Island Ace',
+          hole_number: 1,
+          name: 'Hole 1',
           par: 3,
-          distance_m: null,
+          distance_m: 90,
           tee_latitude: 54.35,
           tee_longitude: 18.65,
           basket_latitude: 54.351,
@@ -324,39 +329,12 @@ describe('ModeratorLayoutManagementFlow', () => {
   describe('ModeratorLayoutDetailsScreen', () => {
     const route = { params: { layoutId: 'l1', layoutName: 'Base Layout', courseId: 'c1' } };
 
-    it('displays holes and allows adding a new hole', async () => {
-      const { findByText } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
+    it('shows layout details without standalone playable-hole creation UI', async () => {
+      const { findByText, queryByText } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
       
-      await findByText('PLAYABLE HOLES');
-      fireEvent.press(await findByText('Add Hole'));
-
-      await waitFor(() => {
-        expect(mockHolesInsert).toHaveBeenCalledWith({
-          layout_id: 'l1',
-          hole_number: 2, // next hole number
-          par: 3,
-        });
-      });
-    });
-
-    it('allows editing and deleting an existing hole', async () => {
-      const { findByText, findAllByPlaceholderText } = render(<ModeratorLayoutDetailsScreen navigation={mockNavigation} route={route} />);
-      
-      await findByText('PLAYABLE HOLES');
-      
-      const pars = await findAllByPlaceholderText('Par');
-      fireEvent.changeText(pars[0], '4');
-      fireEvent.press(await findByText('Save'));
-
-      await waitFor(() => {
-        expect(mockHolesUpdateEq).toHaveBeenCalledWith('id', 'h1');
-      });
-
-      fireEvent.press(await findByText('Delete'));
-
-      await waitFor(() => {
-        expect(mockHolesDeleteEq).toHaveBeenCalledWith('id', 'h1');
-      });
+      await findByText('LAYOUT DETAILS');
+      expect(queryByText('PLAYABLE HOLES')).toBeNull();
+      expect(queryByText('Add Hole')).toBeNull();
     });
 
     it('shows included and excluded course holes and selects existing holes into the layout', async () => {
@@ -378,7 +356,7 @@ describe('ModeratorLayoutManagementFlow', () => {
           layout_id: 'l1',
           hole_number: 2,
           par: 4,
-          distance_m: null,
+          distance_m: 120,
           tee_latitude: null,
           tee_longitude: null,
           basket_latitude: null,
@@ -407,13 +385,14 @@ describe('ModeratorLayoutManagementFlow', () => {
 
       await waitFor(() => {
         expect(mockCourseHolesUpdate).toHaveBeenCalledWith({
+          hole_number: 1,
           name: 'Hole 1',
           tee_latitude: 54.35,
           tee_longitude: 18.65,
           basket_latitude: 54.351,
           basket_longitude: 18.651,
           par: 3,
-          distance_m: null,
+          distance_m: 90,
         });
         expect(mockCourseHolesUpdateEq).toHaveBeenCalledWith('id', 'ch1');
         expect(mockHolesUpdateEq).toHaveBeenCalledWith('id', 'h1');

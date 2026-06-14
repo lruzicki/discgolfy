@@ -29,6 +29,7 @@ describe('moderator layout management migration', () => {
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS course_holes');
     expect(sql).toContain('course_id uuid NOT NULL REFERENCES courses(id)');
+    expect(sql).toContain('name text NOT NULL');
     expect(sql).toContain('tee_latitude double precision');
     expect(sql).toContain('basket_longitude double precision');
 
@@ -45,5 +46,17 @@ describe('moderator layout management migration', () => {
     expect(sql).toContain('CREATE POLICY "Moderators can manage course holes" ON course_holes');
     expect(sql).toContain('CREATE POLICY "Moderators can manage layout holes" ON layout_holes');
     expect(sql).toContain('CREATE POLICY "Moderators can manage course maps" ON course_maps');
+  });
+
+  it('adds stable hole numbers to reusable course holes', () => {
+    const migrationsDir = path.resolve(__dirname, '../../../supabase/migrations');
+    const migrationFiles = fs.readdirSync(migrationsDir).filter((name) => name.includes('add_course_hole_number'));
+    expect(migrationFiles.length).toBeGreaterThan(0);
+
+    const sql = fs.readFileSync(path.join(migrationsDir, migrationFiles[0]), 'utf8');
+
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS hole_number integer');
+    expect(sql).toContain('ALTER COLUMN hole_number SET NOT NULL');
+    expect(sql).toContain('UNIQUE (course_id, hole_number)');
   });
 });

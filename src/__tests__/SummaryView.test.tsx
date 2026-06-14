@@ -70,7 +70,7 @@ describe('ScorecardView', () => {
     };
 
     const { getByTestId, getAllByText } = render(
-      <ScorecardView holes={mockHoles} players={mockPlayers} scores={mockScores} showLeaderboard={false} />
+      <ScorecardView holes={mockHoles} players={mockPlayers} scores={mockScores} showLeaderboard={false} unplayableHoleIds={['h1']} />
     );
 
     const holeHeaderCell = getByTestId('summary-cell-hole-h1');

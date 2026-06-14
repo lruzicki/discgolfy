@@ -117,7 +117,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
     const state = get();
     const currentStrokes = state.scores[holeId]?.[playerId];
     if (currentStrokes === null || currentStrokes === undefined) return;
-    const nextStrokes = Math.max(1, currentStrokes - 1);
+    const nextStrokes = currentStrokes <= 1 ? null : currentStrokes - 1;
     get().setScore(holeId, playerId, nextStrokes);
   },
 
