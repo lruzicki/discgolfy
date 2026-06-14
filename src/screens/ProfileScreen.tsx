@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { COLORS } from '../theme';
 import { supabase } from '../lib/supabase';
 import { buildProfileStats } from '../services/profileStats';
 import { Avatar } from '../components/Avatar';
+import * as Location from 'expo-location';
+import { calculateDistance } from '../lib/utils';
 
 function RecentPerformanceChart({ data }: { data: { label: string, diff: number }[] }) {
   if (data.length === 0) return null;
@@ -92,6 +94,9 @@ export function ProfileScreen({ route, navigation }: any) {
     hitPeople: 0,
   });
   const [recentPerformance, setRecentPerformance] = useState<{label: string, diff: number}[]>([]);
+  const [isMeasureModalVisible, setIsMeasureModalVisible] = useState(false);
+  const [standaloneThrowStart, setStandaloneThrowStart] = useState<{ lat: number; lng: number } | null>(null);
+  const [standaloneThrowDistance, setStandaloneThrowDistance] = useState<number | null>(null);
   const isSchemaCacheMissing = (error: any, key: string) =>
     Boolean(error?.message && error.message.toLowerCase().includes('schema cache') && error.message.includes(key));
 
@@ -185,9 +190,9 @@ export function ProfileScreen({ route, navigation }: any) {
 
       const nextStats = buildProfileStats({
         roundsCount: roundsCount || 0,
-        bestRoundData: bestRoundData || [],
-        scoresData: scoresData || [],
-        throwData,
+        bestRoundData: (bestRoundData || []) as any[],
+        scoresData: (scoresData || []) as any[],
+        throwData: throwData as any[],
         throwEventData,
       });
 
@@ -218,6 +223,48 @@ export function ProfileScreen({ route, navigation }: any) {
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const openStandaloneMeasure = () => {
+    setStandaloneThrowStart(null);
+    setStandaloneThrowDistance(null);
+    setIsMeasureModalVisible(true);
+  };
+
+  const startStandaloneMeasure = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required.');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setStandaloneThrowStart({
+        lat: location.coords.latitude,
+        lng: location.coords.longitude,
+      });
+      setStandaloneThrowDistance(null);
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    }
+  };
+
+  const finishStandaloneMeasure = async () => {
+    if (!standaloneThrowStart) return;
+
+    try {
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const distance = calculateDistance(
+        standaloneThrowStart.lat,
+        standaloneThrowStart.lng,
+        location.coords.latitude,
+        location.coords.longitude,
+      );
+      setStandaloneThrowDistance(distance);
+    } catch (error: any) {
       Alert.alert('Error', error.message);
     }
   };
@@ -269,7 +316,7 @@ export function ProfileScreen({ route, navigation }: any) {
           <View style={styles.statCardHalf}>
             <View style={styles.statHeader}>
               <Ionicons name="trending-up" size={16} color={COLORS.textSecondary} />
-              <Text style={styles.statLabel}>AVG. SCORE</Text>
+              <Text style={styles.statLabel}>AVG / HOLE</Text>
             </View>
             <Text style={[
               styles.statValue, 
@@ -375,6 +422,11 @@ export function ProfileScreen({ route, navigation }: any) {
         </View>
 
         <View style={styles.actionGrid}>
+          <TouchableOpacity style={styles.actionButton} onPress={openStandaloneMeasure}>
+            <MaterialCommunityIcons name="ruler" size={20} color={COLORS.textSecondary} />
+            <Text style={styles.actionText}>MEASURE THROW</Text>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} style={styles.actionArrow} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('LongestThrows')}>
             <MaterialCommunityIcons name="arrow-up-right-bold" size={20} color={COLORS.textSecondary} />
             <Text style={styles.actionText}>LONGEST THROWS</Text>
@@ -421,6 +473,46 @@ export function ProfileScreen({ route, navigation }: any) {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <Modal visible={isMeasureModalVisible} transparent animationType="fade">
+        <View style={styles.measureOverlay}>
+          <View style={styles.measureContent}>
+            <View style={styles.measureHeader}>
+              <Text style={styles.measureTitle}>
+                {standaloneThrowDistance === null ? 'Measure throw' : 'Throw measured'}
+              </Text>
+              <TouchableOpacity
+                accessibilityLabel="Close standalone throw result"
+                onPress={() => setIsMeasureModalVisible(false)}
+              >
+                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {standaloneThrowDistance !== null ? (
+              <Text style={styles.measureDistance}>{standaloneThrowDistance}m</Text>
+            ) : (
+              <View style={styles.measureActions}>
+                <TouchableOpacity
+                  style={[styles.measureActionButton, standaloneThrowStart && styles.measureActionButtonMuted]}
+                  onPress={startStandaloneMeasure}
+                >
+                  <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color={COLORS.onPrimary} />
+                  <Text style={styles.measureActionText}>START</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.measureActionButton, !standaloneThrowStart && styles.measureActionButtonDisabled]}
+                  disabled={!standaloneThrowStart}
+                  onPress={finishStandaloneMeasure}
+                >
+                  <MaterialCommunityIcons name="flag-checkered" size={20} color={COLORS.onPrimary} />
+                  <Text style={styles.measureActionText}>FINISH</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -640,6 +732,62 @@ const styles = StyleSheet.create({
     color: '#FF5252',
     fontSize: 16,
     fontWeight: '600',
+  },
+  measureOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  measureContent: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  measureHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  measureTitle: {
+    color: COLORS.text,
+    fontSize: 19,
+    fontWeight: '700',
+  },
+  measureActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  measureActionButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  measureActionButtonMuted: {
+    backgroundColor: COLORS.borderDark,
+  },
+  measureActionButtonDisabled: {
+    opacity: 0.45,
+  },
+  measureActionText: {
+    color: COLORS.onPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  measureDistance: {
+    color: COLORS.primary,
+    fontSize: 44,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   centered: {
     justifyContent: 'center',
