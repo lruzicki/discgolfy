@@ -12,24 +12,29 @@ jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));
 
-jest.mock('react-native-maps', () => {
+jest.mock('react-native-webview', () => {
   const React = require('react');
   const { Pressable, View } = require('react-native');
 
-  const MapView = ({ children, testID, onPress }: any) => (
-    <Pressable testID={testID} onPress={onPress}>
-      {children}
-    </Pressable>
-  );
-
-  const Marker = ({ testID }: any) => <View testID={testID} />;
-  const Polyline = ({ testID }: any) => <View testID={testID} />;
-
   return {
-    __esModule: true,
-    default: MapView,
-    Marker,
-    Polyline,
+    WebView: ({ testID, onMessage }: any) => (
+      <Pressable
+        testID={testID}
+        onPress={(event: any) =>
+          onMessage?.({
+            nativeEvent: {
+              data: JSON.stringify({
+                type: 'pick',
+                latitude: event?.nativeEvent?.coordinate?.latitude ?? 0,
+                longitude: event?.nativeEvent?.coordinate?.longitude ?? 0,
+              }),
+            },
+          })
+        }
+      >
+        <View />
+      </Pressable>
+    ),
   };
 });
 

@@ -158,6 +158,17 @@ export function LeaderboardScreen() {
     fetchRankings();
   };
 
+  const formatRankingValue = (value: number | string) => {
+    if (activeFilter === 'avg_diff') {
+      const numericValue = Number(value);
+      if (numericValue === 0) return 'E';
+      const formatted = Math.abs(numericValue).toFixed(2);
+      return numericValue > 0 ? `+${formatted}` : `-${formatted}`;
+    }
+
+    return value === 0 ? 'E' : (typeof value === 'number' && value > 0 ? `+${value}` : value);
+  };
+
   const renderRankingItem = ({ item, index }: { item: PlayerRanking, index: number }) => {
     // Data passed to FlatList is already sliced, so index here is 0-based for the list starting from rank 4
     const actualRank = index + 4;
@@ -179,7 +190,7 @@ export function LeaderboardScreen() {
             styles.rankValue,
             activeFilter === 'avg_diff' && Number(item.value) < 0 && { color: COLORS.success }
           ]}>
-            {item.value === 0 ? 'E' : (typeof item.value === 'number' && item.value > 0 ? `+${item.value}` : item.value)}
+            {formatRankingValue(item.value)}
           </Text>
         </View>
       </View>
@@ -282,7 +293,7 @@ export function LeaderboardScreen() {
           data={rankings.slice(3)}
           keyExtractor={(item) => item.id}
           renderItem={renderRankingItem}
-          ListHeaderComponent={<PodiumView players={rankings} />}
+          ListHeaderComponent={<PodiumView players={rankings} activeFilter={activeFilter} />}
           contentContainerStyle={styles.listContent}
           refreshing={refreshing}
           onRefresh={onRefresh}

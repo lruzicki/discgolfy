@@ -1017,13 +1017,6 @@ const fetchEventsForHole = async () => {
               <Text style={styles.scorecardTitle}>Scorecard</Text>
               {isCreator ? (
                 <View style={styles.scorecardIcons}>
-                  <TouchableOpacity
-                    style={styles.iconBtn}
-                    accessibilityLabel="Mark hole unplayable today"
-                    onPress={markCurrentHoleUnplayable}
-                  >
-                    <MaterialCommunityIcons name="close-octagon-outline" size={22} color={COLORS.textSecondary} />
-                  </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.iconBtn, pendingThrow && { backgroundColor: COLORS.primary }]} 
                     onPress={!pendingThrow ? handleStartThrow : handleEndThrow}

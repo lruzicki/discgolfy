@@ -88,7 +88,7 @@ export function buildScoreRankings(rows: ScoreRankingRow[], activeFilter: ScoreF
         id: player.id,
         display_name: player.name,
         avatar_url: player.avatar_url,
-        value: averageDiffPerPlayedHole(player.totalDiff, player.playedHoles).toFixed(1),
+        value: Number(averageDiffPerPlayedHole(player.totalDiff, player.playedHoles).toFixed(2)),
         subValue: formatPlayedHoles(player.playedHoles),
       };
     }
@@ -109,7 +109,7 @@ export function buildScoreRankings(rows: ScoreRankingRow[], activeFilter: ScoreF
         display_name: player.name,
         avatar_url: player.avatar_url,
         value: player.roundsCount,
-        subValue: `Avg / Hole: ${averageDiffPerPlayedHole(player.totalDiff, player.playedHoles).toFixed(1)}`,
+        subValue: `Avg / Hole: ${averageDiffPerPlayedHole(player.totalDiff, player.playedHoles).toFixed(2)}`,
       };
     }
 

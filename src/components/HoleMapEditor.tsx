@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { Marker, Polyline, Region } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 
@@ -24,11 +24,9 @@ interface HoleMapEditorProps {
   testIDPrefix: string;
 }
 
-const DEFAULT_REGION: Region = {
+const DEFAULT_CENTER = {
   latitude: 54.352,
   longitude: 18.6466,
-  latitudeDelta: 0.01,
-  longitudeDelta: 0.01,
 };
 
 function toNumber(value: number | string | null | undefined): number | null {
@@ -45,44 +43,143 @@ function formatCoordinate(value: number | string | null | undefined) {
   return numeric === null ? 'Not set' : numeric.toFixed(4);
 }
 
-function buildRegion(draft: HoleDraft): Region {
-  const points = [
-    {
-      latitude: toNumber(draft.tee_latitude),
-      longitude: toNumber(draft.tee_longitude),
-    },
-    {
-      latitude: toNumber(draft.basket_latitude),
-      longitude: toNumber(draft.basket_longitude),
-    },
-  ].filter(
-    (point): point is { latitude: number; longitude: number } =>
-      point.latitude !== null && point.longitude !== null
-  );
+function buildMapHtml({
+  center,
+  teeLatitude,
+  teeLongitude,
+  basketLatitude,
+  basketLongitude,
+  pickMode,
+}: {
+  center: { latitude: number; longitude: number };
+  teeLatitude: number | null;
+  teeLongitude: number | null;
+  basketLatitude: number | null;
+  basketLongitude: number | null;
+  pickMode: PickMode;
+}) {
+  const payload = JSON.stringify({
+    center,
+    tee: teeLatitude !== null && teeLongitude !== null ? { lat: teeLatitude, lng: teeLongitude } : null,
+    basket:
+      basketLatitude !== null && basketLongitude !== null ? { lat: basketLatitude, lng: basketLongitude } : null,
+    pickMode,
+  });
 
-  if (points.length === 0) return DEFAULT_REGION;
-  if (points.length === 1) {
-    return {
-      latitude: points[0].latitude,
-      longitude: points[0].longitude,
-      latitudeDelta: 0.004,
-      longitudeDelta: 0.004,
-    };
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          html, body, #map { height: 100%; margin: 0; padding: 0; background: #0f1419; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+          .leaflet-control-attribution { display: none; }
+          .pick-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(10, 15, 20, 0.92);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            border: 1px solid rgba(255,255,255,0.08);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="pick-badge" id="pick-badge"></div>
+        <div id="map"></div>
+        <script>
+          const state = ${payload};
+          const map = L.map('map', { zoomControl: true, attributionControl: false });
+          const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 20,
+          });
+          tiles.addTo(map);
+
+          const teeIcon = L.divIcon({
+            className: 'tee-marker',
+            html: "<div style='background:#FFC857;color:#111;width:22px;height:22px;border-radius:11px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;'>T</div>",
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+
+          const basketIcon = L.divIcon({
+            className: 'basket-marker',
+            html: "<div style='background:#39FF14;color:#111;width:22px;height:22px;border-radius:11px;border:2px solid white;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;'>B</div>",
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
+
+          document.getElementById('pick-badge').textContent =
+            state.pickMode === 'tee' ? 'Picking tee' : 'Picking basket';
+
+          const points = [];
+          if (state.tee) points.push([state.tee.lat, state.tee.lng]);
+          if (state.basket) points.push([state.basket.lat, state.basket.lng]);
+
+          if (points.length === 0) {
+            map.setView([state.center.latitude, state.center.longitude], 16);
+          } else if (points.length === 1) {
+            map.setView(points[0], 17);
+          } else {
+            map.fitBounds(points, { padding: [28, 28] });
+          }
+
+          if (state.tee) {
+            L.marker([state.tee.lat, state.tee.lng], { icon: teeIcon }).addTo(map);
+          }
+
+          if (state.basket) {
+            L.marker([state.basket.lat, state.basket.lng], { icon: basketIcon }).addTo(map);
+          }
+
+          if (state.tee && state.basket) {
+            L.polyline(
+              [
+                [state.tee.lat, state.tee.lng],
+                [state.basket.lat, state.basket.lng],
+              ],
+              { color: '#39FF14', weight: 3, opacity: 0.85 }
+            ).addTo(map);
+          }
+
+          map.on('click', function(event) {
+            const message = JSON.stringify({
+              type: 'pick',
+              latitude: event.latlng.lat,
+              longitude: event.latlng.lng,
+            });
+            window.ReactNativeWebView.postMessage(message);
+          });
+        </script>
+      </body>
+    </html>
+  `;
+}
+
+function getMapCenter(draft: HoleDraft) {
+  const teeLatitude = toNumber(draft.tee_latitude);
+  const teeLongitude = toNumber(draft.tee_longitude);
+  const basketLatitude = toNumber(draft.basket_latitude);
+  const basketLongitude = toNumber(draft.basket_longitude);
+
+  if (teeLatitude !== null && teeLongitude !== null) {
+    return { latitude: teeLatitude, longitude: teeLongitude };
   }
 
-  const latitudes = points.map((point) => point.latitude);
-  const longitudes = points.map((point) => point.longitude);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLng = Math.min(...longitudes);
-  const maxLng = Math.max(...longitudes);
+  if (basketLatitude !== null && basketLongitude !== null) {
+    return { latitude: basketLatitude, longitude: basketLongitude };
+  }
 
-  return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLng + maxLng) / 2,
-    latitudeDelta: Math.max(Math.abs(maxLat - minLat) * 2.2, 0.004),
-    longitudeDelta: Math.max(Math.abs(maxLng - minLng) * 2.2, 0.004),
-  };
+  return DEFAULT_CENTER;
 }
 
 export function HoleMapEditor({
@@ -99,7 +196,22 @@ export function HoleMapEditor({
   const teeLongitude = toNumber(draft.tee_longitude);
   const basketLatitude = toNumber(draft.basket_latitude);
   const basketLongitude = toNumber(draft.basket_longitude);
-  const region = useMemo(() => buildRegion(draft), [draft]);
+  const center = useMemo(() => getMapCenter(draft), [draft]);
+
+  const mapHtml = useMemo(
+    () =>
+      buildMapHtml({
+        center,
+        teeLatitude,
+        teeLongitude,
+        basketLatitude,
+        basketLongitude,
+        pickMode,
+      }),
+    [center, teeLatitude, teeLongitude, basketLatitude, basketLongitude, pickMode]
+  );
+
+  const mapKey = `${pickMode}:${teeLatitude ?? 'x'}:${teeLongitude ?? 'x'}:${basketLatitude ?? 'x'}:${basketLongitude ?? 'x'}`;
 
   return (
     <View style={styles.card}>
@@ -126,45 +238,29 @@ export function HoleMapEditor({
         Tap the map to place the {pickMode === 'tee' ? 'tee' : 'basket'} marker.
       </Text>
 
-      <MapView
-        testID={`${testIDPrefix}-map`}
-        style={styles.map}
-        initialRegion={region}
-        region={region}
-        onPress={(event) => {
-          const { latitude, longitude } = event.nativeEvent.coordinate;
-          onMapPick(pickMode, latitude, longitude);
-        }}
-      >
-        {teeLatitude !== null && teeLongitude !== null ? (
-          <Marker
-            testID={`${testIDPrefix}-tee-marker`}
-            coordinate={{ latitude: teeLatitude, longitude: teeLongitude }}
-            pinColor="#FFC857"
-          />
-        ) : null}
-        {basketLatitude !== null && basketLongitude !== null ? (
-          <Marker
-            testID={`${testIDPrefix}-basket-marker`}
-            coordinate={{ latitude: basketLatitude, longitude: basketLongitude }}
-            pinColor={COLORS.primaryDark}
-          />
-        ) : null}
-        {teeLatitude !== null &&
-        teeLongitude !== null &&
-        basketLatitude !== null &&
-        basketLongitude !== null ? (
-          <Polyline
-            testID={`${testIDPrefix}-hole-line`}
-            coordinates={[
-              { latitude: teeLatitude, longitude: teeLongitude },
-              { latitude: basketLatitude, longitude: basketLongitude },
-            ]}
-            strokeColor={COLORS.primary}
-            strokeWidth={3}
-          />
-        ) : null}
-      </MapView>
+      <View style={styles.mapFrame}>
+        <WebView
+          key={mapKey}
+          testID={`${testIDPrefix}-map`}
+          source={{ html: mapHtml }}
+          originWhitelist={['*']}
+          javaScriptEnabled
+          domStorageEnabled
+          scrollEnabled={false}
+          setSupportMultipleWindows={false}
+          style={styles.map}
+          onMessage={(event) => {
+            try {
+              const payload = JSON.parse(event.nativeEvent.data);
+              if (payload?.type !== 'pick') return;
+              if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude)) return;
+              onMapPick(pickMode, payload.latitude, payload.longitude);
+            } catch {
+              // Ignore malformed map events.
+            }
+          }}
+        />
+      </View>
 
       <View style={styles.summaryRow}>
         <View style={styles.summaryPill}>
@@ -260,16 +356,16 @@ const styles = StyleSheet.create({
   },
   modeButton: {
     flex: 1,
-    borderRadius: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
     paddingVertical: 10,
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: COLORS.borderDark,
   },
   modeButtonActive: {
-    backgroundColor: 'rgba(144, 202, 249, 0.16)',
     borderColor: COLORS.primary,
+    backgroundColor: 'rgba(144, 202, 249, 0.14)',
   },
   modeButtonText: {
     color: COLORS.textSecondary,
@@ -280,12 +376,17 @@ const styles = StyleSheet.create({
   },
   helpText: {
     color: COLORS.textSecondary,
-    fontSize: 13,
+    lineHeight: 18,
+  },
+  mapFrame: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.borderDark,
   },
   map: {
-    width: '100%',
-    height: 220,
-    borderRadius: 8,
+    height: 260,
+    backgroundColor: '#10161D',
   },
   summaryRow: {
     gap: 8,
@@ -295,17 +396,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   summaryText: {
-    color: COLORS.textLight,
-    fontSize: 13,
+    color: COLORS.text,
+    flexShrink: 1,
   },
   manualToggle: {
     alignSelf: 'flex-start',
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   manualToggleText: {
     color: COLORS.primary,
@@ -313,16 +414,16 @@ const styles = StyleSheet.create({
   },
   manualGrid: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   column: {
     flex: 1,
+    gap: 8,
   },
   inputLabel: {
     color: COLORS.textSecondary,
     fontSize: 12,
     fontWeight: '600',
-    marginBottom: 6,
   },
   input: {
     backgroundColor: 'rgba(255,255,255,0.06)',
@@ -332,6 +433,5 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 10,
   },
 });

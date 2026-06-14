@@ -15,9 +15,25 @@ interface PlayerRanking {
 
 interface PodiumViewProps {
   players: PlayerRanking[];
+  activeFilter?: 'avg_diff' | 'best_score' | 'longest_throw' | 'longest_putt' | 'most_rounds' | 'total_strokes';
 }
 
-export const PodiumView: React.FC<PodiumViewProps> = ({ players }) => {
+function formatPodiumValue(
+  value: number | string,
+  activeFilter?: 'avg_diff' | 'best_score' | 'longest_throw' | 'longest_putt' | 'most_rounds' | 'total_strokes'
+) {
+  if (activeFilter === 'avg_diff') {
+    const numericValue = Number(value);
+    if (numericValue === 0) return 'E';
+    const formatted = Math.abs(numericValue).toFixed(2);
+    return numericValue > 0 ? `+${formatted}` : `-${formatted}`;
+  }
+
+  if (typeof value === 'string') return value;
+  return value === 0 ? 'E' : (value > 0 ? `+${value}` : value);
+}
+
+export const PodiumView: React.FC<PodiumViewProps> = ({ players, activeFilter }) => {
   const top3 = players.slice(0, 3);
   
   // Reorder for podium: [2nd, 1st, 3rd]
@@ -43,8 +59,7 @@ export const PodiumView: React.FC<PodiumViewProps> = ({ players }) => {
           </View>
           <Text style={styles.name} numberOfLines={1}>{player.display_name}</Text>
           <Text style={[styles.score, isFirst && styles.firstScore]}>
-            {typeof player.value === 'string' ? player.value : 
-              (player.value === 0 ? 'E' : (player.value > 0 ? `+${player.value}` : player.value))}
+            {formatPodiumValue(player.value, activeFilter)}
           </Text>
         </View>
         
